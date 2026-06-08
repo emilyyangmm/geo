@@ -1,10 +1,11 @@
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageSequence
 import math
 import random
 
 OUT = Path(__file__).parent / "pdd商品图"
 OUT.mkdir(exist_ok=True)
+LOGO_DIR = Path(__file__).parent / "assets" / "ai-logos"
 
 W = H = 900
 FONT_BOLD = "C:/Windows/Fonts/msyhbd.ttc"
@@ -116,42 +117,33 @@ def slanted_banner(draw, x, y, w, h, text, fill, fg=(5, 12, 26), size=34):
     fit_text(draw, (x + w / 2, y + h / 2 - 1), text, w - 40, size, 22, fg, True, "mm")
 
 
-def ai_logo_icon(draw, cx, cy, brand):
-    # Logo-style badges for marketplace covers. These are simplified marks plus
-    # brand text, so the cover stays legible even at thumbnail size.
-    draw.ellipse((cx - 47, cy - 47, cx + 47, cy + 47), fill=(255, 255, 255), outline=(232, 255, 255), width=5)
+LOGOS = {
+    "doubao": ("doubao.png", "豆包"),
+    "deepseek": ("deepseek.ico", "DeepSeek"),
+    "kimi": ("kimi.ico", "Kimi"),
+    "qwen": ("qwen-icon.png", "通义千问"),
+    "yuanbao": ("yuanbao.ico", "元宝"),
+    "zhipu": ("zhipu.ico", "智谱"),
+}
 
-    if brand == "doubao":
-        draw.ellipse((cx - 26, cy - 28, cx + 16, cy + 14), fill=(33, 205, 169))
-        draw.ellipse((cx - 4, cy - 8, cx + 29, cy + 25), fill=(71, 116, 255))
-        draw.ellipse((cx - 11, cy - 14, cx + 10, cy + 7), fill=(255, 255, 255, 210))
-        fit_text(draw, (cx, cy + 58), "豆包", 88, 19, 15, (255, 255, 255), True, "mm")
-    elif brand == "deepseek":
-        draw.ellipse((cx - 32, cy - 24, cx + 28, cy + 22), fill=(53, 96, 255))
-        draw.polygon([(cx + 8, cy - 24), (cx + 34, cy - 36), (cx + 22, cy - 10)], fill=(53, 96, 255))
-        draw.pieslice((cx - 44, cy - 12, cx - 8, cy + 28), 200, 20, fill=(53, 96, 255))
-        draw.ellipse((cx + 12, cy - 6, cx + 20, cy + 2), fill=(255, 255, 255))
-        fit_text(draw, (cx, cy + 58), "DeepSeek", 106, 16, 12, (255, 255, 255), True, "mm")
-    elif brand == "kimi":
-        draw.ellipse((cx - 32, cy - 32, cx + 32, cy + 32), fill=(0, 0, 0))
-        draw.text((cx - 4, cy - 2), "K", font=font(43, True), fill=(255, 255, 255), anchor="mm")
-        draw.ellipse((cx + 17, cy - 23, cx + 27, cy - 13), fill=(67, 119, 255))
-        fit_text(draw, (cx, cy + 58), "Kimi", 88, 18, 14, (255, 255, 255), True, "mm")
-    elif brand == "qwen":
-        draw.polygon([(cx, cy - 35), (cx + 31, cy - 18), (cx + 31, cy + 18), (cx, cy + 35), (cx - 31, cy + 18), (cx - 31, cy - 18)], fill=(24, 134, 255))
-        draw.polygon([(cx, cy - 19), (cx + 16, cy - 9), (cx + 16, cy + 10), (cx, cy + 20), (cx - 16, cy + 10), (cx - 16, cy - 9)], fill=(255, 255, 255))
-        draw.polygon([(cx, cy - 11), (cx + 8, cy - 5), (cx + 8, cy + 5), (cx, cy + 11), (cx - 8, cy + 5), (cx - 8, cy - 5)], fill=(24, 134, 255))
-        fit_text(draw, (cx, cy + 58), "通义千问", 100, 17, 13, (255, 255, 255), True, "mm")
-    elif brand == "yuanbao":
-        draw.ellipse((cx - 33, cy - 33, cx + 33, cy + 33), fill=(97, 76, 255))
-        draw.arc((cx - 24, cy - 18, cx + 25, cy + 30), 190, 345, fill=(255, 210, 68), width=8)
-        draw.text((cx, cy - 4), "元", font=font(32, True), fill=(255, 255, 255), anchor="mm")
-        fit_text(draw, (cx, cy + 58), "元宝", 88, 19, 15, (255, 255, 255), True, "mm")
-    elif brand == "zhipu":
-        draw.polygon([(cx, cy - 36), (cx + 35, cy - 8), (cx + 21, cy + 34), (cx - 21, cy + 34), (cx - 35, cy - 8)], fill=(121, 74, 255))
-        draw.line((cx - 18, cy - 15, cx + 18, cy - 15, cx - 16, cy + 20, cx + 19, cy + 20), fill=(255, 255, 255), width=7)
-        draw.ellipse((cx + 19, cy - 28, cx + 31, cy - 16), fill=(105, 255, 205))
-        fit_text(draw, (cx, cy + 58), "智谱", 88, 19, 15, (255, 255, 255), True, "mm")
+
+def load_logo(filename):
+    path = LOGO_DIR / filename
+    img = Image.open(path)
+    frames = [frame.copy().convert("RGBA") for frame in ImageSequence.Iterator(img)]
+    if not frames:
+        return img.convert("RGBA")
+    return max(frames, key=lambda frame: frame.width * frame.height)
+
+
+def ai_logo_icon(base, draw, cx, cy, brand):
+    filename, label = LOGOS[brand]
+    draw.ellipse((cx - 49, cy - 49, cx + 49, cy + 49), fill=(255, 255, 255), outline=(232, 255, 255), width=5)
+
+    logo = load_logo(filename)
+    logo.thumbnail((74, 74), Image.LANCZOS)
+    base.alpha_composite(logo, (int(cx - logo.width / 2), int(cy - logo.height / 2)))
+    fit_text(draw, (cx, cy + 58), label, 108, 18, 12, (255, 255, 255), True, "mm")
 
 
 def robot_core(base):
@@ -191,10 +183,10 @@ def main():
     slanted_banner(d, 314, 510, 274, 72, "企业品牌", (255, 0, 72), (255, 255, 255), 39)
     slanted_banner(d, 590, 510, 262, 72, "口碑建设", (122, 255, 89), (7, 19, 37), 37)
 
-    # AI platform logo-style badges
+    # AI platform logo badges
     brands = ["doubao", "deepseek", "kimi", "qwen", "yuanbao", "zhipu"]
     for i, brand in enumerate(brands):
-        ai_logo_icon(d, 112 + i * 136, 672, brand)
+        ai_logo_icon(img, d, 112 + i * 136, 672, brand)
 
     # Bottom slogan pill
     add_glow(img, lambda gd, c: gd.rounded_rectangle((36, 770, 864, 846), radius=38, fill=(124, 255, 52, 110)), blur=16)

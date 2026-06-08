@@ -4,3 +4,7 @@ geo-publisher/cookies/
 deploy/certs/
 .DS_Store
 *.log
+assets/ai-logos/contact.jpg
+assets/ai-logos/doubao.ico
+assets/ai-logos/qwen.svg
+assets/ai-logos/qwen-render.png
