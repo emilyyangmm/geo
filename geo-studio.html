@@ -1214,12 +1214,19 @@ window.goPage = function(n, el) {
 // ===================== 一键发布模块 =====================
 const SERVER = 'http://127.0.0.1:3001';
 
+function fetchWithTimeout(url, options = {}, timeout = 3000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  return fetch(url, { ...options, signal: controller.signal })
+    .finally(() => clearTimeout(timer));
+}
+
 // 检测本地发布服务
 async function checkServer() {
   const dot = document.getElementById('serverDot');
   const txt = document.getElementById('serverStatusText');
   try {
-    const res = await fetch(SERVER + '/api/status', { signal: AbortSignal.timeout(3000) });
+    const res = await fetchWithTimeout(SERVER + '/api/status');
     const data = await res.json();
     dot.classList.add('ok');
     const configured = data.configured || [];
