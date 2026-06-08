@@ -26,24 +26,17 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
 
       const stillOnLogin = page.url().includes('passport') || page.url().includes('login');
       if (stillOnLogin) {
-        addLog('正在填写百度账号...');
+        addLog('Cookie 无效，需要手动登录百度/百家号...');
         const userInput = await page.$('#TANGRAM__PSP_3__userName, input[name="userName"], #userName');
-        if (userInput) {
+        if (userInput && creds.username) {
           await userInput.click({ clickCount: 3 });
           await userInput.type(creds.username, { delay: 40 });
         }
-        const pwdInput = await page.$('#TANGRAM__PSP_3__password, input[name="password"], #password');
-        if (pwdInput) {
-          await pwdInput.click();
-          await pwdInput.type(creds.password, { delay: 40 });
-        }
-        const loginBtn = await page.$('#TANGRAM__PSP_3__submit, button[type="submit"], .login-btn');
-        if (loginBtn) await loginBtn.click();
 
-        addLog('已提交登录，请在浏览器中完成验证（百度可能需要扫码）...');
-        await waitForManualAction(addLog, '请完成百度安全验证后继续', 90000);
+        addLog('请在弹出的浏览器中用扫码/短信/安全验证完成百度登录...');
+        await waitForManualAction(addLog, '请完成百家号登录，登录成功后不要关闭浏览器窗口', 120000);
         await saveCookies(page, cookiePath);
-        addLog('登录成功，已保存 Cookie');
+        addLog('已保存百家号 Cookie，下次会优先自动登录');
 
         await page.goto('https://baijiahao.baidu.com/builder/rc/edit?type=news', { waitUntil: 'domcontentloaded' });
         await page.waitForTimeout(2000);

@@ -25,22 +25,19 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
 
       const stillNeedLogin = page.url().includes('passport') || page.url().includes('login');
       if (stillNeedLogin) {
-        addLog('填写搜狐账号密码...');
+        addLog('Cookie 无效，需要手动登录搜狐号...');
         await page.goto('https://passport.sohu.com/web/signin.jsp', { waitUntil: 'domcontentloaded' });
 
         const userEl = await page.$('#account, input[name="account"], input[placeholder*="账号"]');
-        if (userEl) { await userEl.click(); await userEl.type(creds.username, { delay: 40 }); }
+        if (userEl && creds.username) { await userEl.click(); await userEl.type(creds.username, { delay: 40 }); }
 
         const pwdEl = await page.$('#password, input[name="password"], input[type="password"]');
-        if (pwdEl) { await pwdEl.click(); await pwdEl.type(creds.password, { delay: 40 }); }
+        if (pwdEl && creds.password) { await pwdEl.click(); await pwdEl.type(creds.password, { delay: 40 }); }
 
-        const btn = await page.$('#loginBtn, button[type="submit"], .login-btn');
-        if (btn) await btn.click();
-
-        addLog('等待验证（如需验证码请手动处理）...');
-        await waitForManualAction(addLog, '请完成验证后继续', 60000);
+        addLog('请在弹出的浏览器中完成搜狐登录/验证码...');
+        await waitForManualAction(addLog, '请完成搜狐号登录，登录成功后不要关闭浏览器窗口', 120000);
         await saveCookies(page, cookiePath);
-        addLog('登录成功，已保存 Cookie');
+        addLog('已保存搜狐号 Cookie，下次会优先自动登录');
 
         await page.goto('https://mp.sohu.com/profile', { waitUntil: 'domcontentloaded' });
         await page.waitForTimeout(2000);

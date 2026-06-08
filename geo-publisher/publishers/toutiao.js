@@ -26,30 +26,21 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
 
       const stillNeedLogin = await page.$('input[name="mobile"], [class*="login-form"]');
       if (stillNeedLogin) {
-        addLog('Cookie 无效，正在填写账号密码...');
+        addLog('Cookie 无效，需要手动登录头条号...');
         await page.goto('https://mp.toutiao.com/auth/page/login', { waitUntil: 'domcontentloaded' });
         await page.waitForTimeout(1500);
 
-        // 填写手机号/账号
+        // 头条号通常需要短信验证码/扫码/滑块验证，账号只做预填，后续交给用户手动完成。
         const mobileInput = await page.$('input[name="mobile"], input[placeholder*="手机号"], input[placeholder*="账号"]');
-        if (mobileInput) {
+        if (mobileInput && creds.username) {
           await mobileInput.click();
           await mobileInput.type(creds.username, { delay: 50 });
         }
 
-        const pwdInput = await page.$('input[name="password"], input[type="password"]');
-        if (pwdInput) {
-          await pwdInput.click();
-          await pwdInput.type(creds.password, { delay: 50 });
-        }
-
-        const submitBtn = await page.$('button[type="submit"], .login-btn, [class*="submit"]');
-        if (submitBtn) await submitBtn.click();
-
-        addLog('已提交登录，等待验证（如有短信验证码请手动填写）...');
-        await waitForManualAction(addLog, '请完成短信验证码后继续', 60000);
+        addLog('请在弹出的浏览器中用短信验证码/扫码完成头条号登录...');
+        await waitForManualAction(addLog, '请完成头条号登录，登录成功后不要关闭浏览器窗口', 120000);
         await saveCookies(page, cookiePath);
-        addLog('登录成功，已保存 Cookie');
+        addLog('已保存头条号 Cookie，下次会优先自动登录');
 
         await page.goto('https://mp.toutiao.com/profile_v4/graphic/publish', { waitUntil: 'domcontentloaded' });
         await page.waitForTimeout(2000);

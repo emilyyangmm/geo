@@ -24,6 +24,7 @@ app.use(express.json({ limit: '20mb' }));
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const COOKIES_DIR = path.join(__dirname, 'cookies');
+const MANUAL_LOGIN_PLATFORMS = new Set(['toutiao', 'baijiahao', 'sohu']);
 
 // 确保目录存在
 if (!fs.existsSync(COOKIES_DIR)) fs.mkdirSync(COOKIES_DIR, { recursive: true });
@@ -97,9 +98,9 @@ app.delete('/api/cookies/:platform', (req, res) => {
 app.post('/api/publish', async (req, res) => {
   const { platform, title, content, summary = '', tags = [] } = req.body;
   const config = loadConfig();
-  const creds = config.platforms?.[platform];
+  const creds = config.platforms?.[platform] || {};
 
-  if (!creds || (!creds.username && !creds.appId)) {
+  if (!MANUAL_LOGIN_PLATFORMS.has(platform) && !creds.username && !creds.appId) {
     return res.status(400).json({ error: `平台 ${platform} 未配置账号` });
   }
 
