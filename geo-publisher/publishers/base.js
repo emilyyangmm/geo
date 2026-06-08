@@ -6,10 +6,33 @@ const puppeteer = require('puppeteer-core');
 const fs = require('fs');
 const { marked } = require('marked');
 
+function findChromeExecutable() {
+  const candidates = [
+    process.env.CHROME_PATH,
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    `${process.env.LOCALAPPDATA || ''}\\Google\\Chrome\\Application\\chrome.exe`,
+    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+  ].filter(Boolean);
+
+  const executablePath = candidates.find(p => fs.existsSync(p));
+  if (!executablePath) {
+    throw new Error('找不到 Chrome/Edge 浏览器，请先安装 Chrome，或设置 CHROME_PATH 环境变量');
+  }
+  return executablePath;
+}
+
 // 启动浏览器（使用系统 Chrome，无需单独下载）
 async function launchBrowser() {
-  // macOS Chrome 路径（如用 Edge 可改为对应路径）
-  const executablePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+  const executablePath = findChromeExecutable();
   return puppeteer.launch({
     executablePath,
     headless: false,
