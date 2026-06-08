@@ -1,0 +1,1439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GEO Studio — 生成式引擎优化工作台</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --bg2: #1a1d27;
+    --bg3: #22263a;
+    --border: #2e3347;
+    --accent: #6366f1;
+    --accent2: #818cf8;
+    --green: #10b981;
+    --yellow: #f59e0b;
+    --red: #ef4444;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #64748b;
+    --radius: 12px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; font-size: 14px; line-height: 1.6; min-height: 100vh; }
+
+  /* Header */
+  .header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 58px; position: sticky; top: 0; z-index: 100; }
+  .logo { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; }
+  .logo-icon { width: 32px; height: 32px; background: linear-gradient(135deg, var(--accent), #a78bfa); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .logo-sub { font-size: 11px; color: var(--text3); font-weight: 400; margin-left: 2px; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .api-status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text3); }
+  .status-dot.ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .btn { padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg3); color: var(--text); cursor: pointer; font-size: 13px; transition: all .15s; display: inline-flex; align-items: center; gap: 6px; }
+  .btn:hover { border-color: var(--accent2); color: var(--accent2); }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .btn-primary:hover { background: #5558e8; border-color: #5558e8; color: #fff; }
+  .btn-primary:disabled { background: var(--bg3); border-color: var(--border); color: var(--text3); cursor: not-allowed; }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn-green { background: var(--green); border-color: var(--green); color: #fff; font-weight: 600; }
+  .btn-green:hover { background: #059669; border-color: #059669; color: #fff; }
+
+  /* Layout */
+  .layout { display: flex; height: calc(100vh - 58px); }
+
+  /* Sidebar */
+  .sidebar { width: 220px; background: var(--bg2); border-right: 1px solid var(--border); padding: 20px 0; flex-shrink: 0; overflow-y: auto; }
+  .step-nav { list-style: none; }
+  .step-nav li { padding: 0; }
+  .step-nav a { display: flex; align-items: center; gap: 10px; padding: 11px 20px; color: var(--text2); text-decoration: none; font-size: 13px; transition: all .15s; border-left: 3px solid transparent; }
+  .step-nav a:hover { background: var(--bg3); color: var(--text); }
+  .step-nav a.active { background: rgba(99,102,241,0.12); color: var(--accent2); border-left-color: var(--accent); font-weight: 600; }
+  .step-nav a.done { color: var(--green); }
+  .step-num { width: 22px; height: 22px; border-radius: 50%; background: var(--bg3); border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+  .step-nav a.active .step-num { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .step-nav a.done .step-num { background: var(--green); border-color: var(--green); color: #fff; }
+  .sidebar-section { padding: 16px 20px 8px; font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
+
+  /* Main content */
+  .main { flex: 1; overflow-y: auto; padding: 28px 32px; }
+  .page { display: none; }
+  .page.active { display: block; }
+  .page-title { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+  .page-desc { color: var(--text2); margin-bottom: 24px; font-size: 13px; }
+
+  /* Cards */
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+  .card-title { font-size: 14px; font-weight: 600; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .card-title .icon { font-size: 16px; }
+
+  /* Forms */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .form-grid.full { grid-template-columns: 1fr; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 12px; color: var(--text2); font-weight: 500; }
+  .field input, .field textarea, .field select { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; color: var(--text); font-size: 13px; font-family: inherit; transition: border-color .15s; resize: vertical; }
+  .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--accent); }
+  .field textarea { min-height: 80px; }
+  .field .hint { font-size: 11px; color: var(--text3); }
+
+  /* Tags */
+  .tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .tag-blue { background: rgba(99,102,241,0.15); color: var(--accent2); }
+  .tag-green { background: rgba(16,185,129,0.15); color: var(--green); }
+  .tag-yellow { background: rgba(245,158,11,0.15); color: var(--yellow); }
+  .tag-red { background: rgba(239,68,68,0.15); color: var(--red); }
+  .tag-gray { background: var(--bg3); color: var(--text2); }
+
+  /* Keyword Grid */
+  .keyword-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .tab-btn { padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--text2); cursor: pointer; font-size: 12px; transition: all .15s; }
+  .tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .keyword-list { display: flex; flex-direction: column; gap: 8px; }
+  .keyword-item { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; align-items: flex-start; gap: 12px; cursor: pointer; transition: all .15s; }
+  .keyword-item:hover { border-color: var(--accent2); }
+  .keyword-item.selected { border-color: var(--accent); background: rgba(99,102,241,0.08); }
+  .keyword-check { width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--border); flex-shrink: 0; margin-top: 2px; display: flex; align-items: center; justify-content: center; transition: all .15s; }
+  .keyword-item.selected .keyword-check { background: var(--accent); border-color: var(--accent); }
+  .keyword-item.selected .keyword-check::after { content: '✓'; color: #fff; font-size: 11px; font-weight: 700; }
+  .keyword-body { flex: 1; }
+  .keyword-query { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+  .keyword-meta { font-size: 11px; color: var(--text3); display: flex; gap: 10px; }
+  .prob-bar { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text3); }
+  .prob-track { width: 50px; height: 4px; background: var(--border); border-radius: 2px; }
+  .prob-fill { height: 100%; border-radius: 2px; background: var(--green); }
+
+  /* Article Cards */
+  .article-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; }
+  .article-header { padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+  .article-title { font-size: 14px; font-weight: 600; flex: 1; margin-right: 12px; }
+  .article-body { padding: 16px 18px; }
+  .article-summary { color: var(--text2); font-size: 13px; margin-bottom: 12px; line-height: 1.7; }
+  .article-content { display: none; color: var(--text); font-size: 13px; line-height: 1.9; white-space: pre-wrap; border-top: 1px solid var(--border); padding-top: 14px; margin-top: 4px; }
+  .article-content.open { display: block; }
+  .article-footer { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .article-status { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .6s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Platform cards */
+  .platform-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+  .platform-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .platform-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+  .platform-desc { font-size: 12px; color: var(--text2); margin-bottom: 12px; }
+  .sop-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .sop-list li { font-size: 12px; color: var(--text2); display: flex; gap: 6px; }
+  .sop-list li::before { content: '→'; color: var(--accent2); flex-shrink: 0; }
+
+  /* Stats row */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+  .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; text-align: center; }
+  .stat-num { font-size: 28px; font-weight: 800; color: var(--accent2); }
+  .stat-label { font-size: 12px; color: var(--text3); margin-top: 2px; }
+
+  /* Modal */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 16px; padding: 28px; width: 460px; max-width: 95vw; box-shadow: var(--shadow); }
+  .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+  .modal-desc { font-size: 13px; color: var(--text2); margin-bottom: 20px; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
+
+  /* Notice */
+  .notice { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); border-radius: 8px; padding: 12px 14px; font-size: 12px; color: #fbbf24; display: flex; gap: 8px; margin-bottom: 20px; }
+
+  /* Action bar */
+  .action-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; gap: 12px; flex-wrap: wrap; }
+  .action-bar-left { display: flex; align-items: center; gap: 10px; }
+  .select-info { font-size: 13px; color: var(--text2); }
+  .select-info strong { color: var(--accent2); }
+
+  /* Empty state */
+  .empty { text-align: center; padding: 60px 20px; color: var(--text3); }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty-text { font-size: 14px; }
+
+  /* Progress bar */
+  .gen-progress { background: var(--bg3); border-radius: 20px; height: 6px; margin: 8px 0; overflow: hidden; }
+  .gen-progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), #a78bfa); border-radius: 20px; transition: width .3s; }
+
+  /* Export section */
+  .export-area { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 16px; max-height: 300px; overflow-y: auto; }
+  .export-area pre { font-size: 12px; color: var(--text2); white-space: pre-wrap; line-height: 1.8; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .sidebar { display: none; }
+    .main { padding: 16px; }
+    .form-grid { grid-template-columns: 1fr; }
+    .stats-row { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+  <div class="logo">
+    <div class="logo-icon">⚡</div>
+    <div>
+      GEO Studio
+      <div class="logo-sub">生成式引擎优化工作台</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="api-status">
+      <div class="status-dot" id="apiDot"></div>
+      <span id="apiStatusText">未配置 API Key</span>
+    </div>
+    <button class="btn btn-sm" onclick="openApiModal()">⚙️ 配置 API</button>
+  </div>
+</header>
+
+<!-- API Modal -->
+<div class="modal-overlay" id="apiModal">
+  <div class="modal">
+    <div class="modal-title">配置 AI 接口</div>
+    <div class="modal-desc">填写你的 API Key，用于词条发散和文章生成。Key 仅保存在本页面内存中，不会上传。</div>
+    <div class="field" style="margin-bottom:14px">
+      <label>API 提供商</label>
+      <select id="apiProvider" onchange="updateApiPlaceholder()">
+        <option value="openai">OpenAI（推荐）</option>
+        <option value="anthropic">Anthropic Claude（需代理）</option>
+        <option value="custom">自定义 OpenAI 兼容接口</option>
+      </select>
+    </div>
+    <div class="field" style="margin-bottom:14px">
+      <label>API Key</label>
+      <input type="password" id="apiKeyInput" placeholder="sk-..." />
+    </div>
+    <div class="field" id="customUrlField" style="display:none;margin-bottom:14px">
+      <label>自定义接口地址（Base URL）</label>
+      <input type="text" id="customUrl" placeholder="https://your-proxy.com/v1" />
+    </div>
+    <div class="field" style="margin-bottom:4px">
+      <label>模型</label>
+      <select id="modelSelect">
+        <option value="gpt-4o-mini">gpt-4o-mini（快速省钱，适合词条发散）</option>
+        <option value="gpt-4o">gpt-4o（质量更高，推荐文章生成）</option>
+        <option value="claude-3-5-sonnet-20241022">claude-3-5-sonnet（需代理）</option>
+        <option value="custom">自定义</option>
+      </select>
+    </div>
+    <div class="field" id="customModelField" style="display:none;margin-top:10px">
+      <input type="text" id="customModel" placeholder="输入模型名称" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeApiModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveApiConfig()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Main Layout -->
+<div class="layout">
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-section">工作流程</div>
+    <ul class="step-nav">
+      <li><a href="#" class="active" onclick="goPage(1,this)" id="nav1">
+        <div class="step-num">1</div> 产品定义
+      </a></li>
+      <li><a href="#" onclick="goPage(2,this)" id="nav2">
+        <div class="step-num">2</div> 词条发散
+      </a></li>
+      <li><a href="#" onclick="goPage(3,this)" id="nav3">
+        <div class="step-num">3</div> 文章生成
+      </a></li>
+      <li><a href="#" onclick="goPage(4,this)" id="nav4">
+        <div class="step-num">4</div> 内容包导出
+      </a></li>
+    </ul>
+    <div class="sidebar-section" style="margin-top:20px">投放平台</div>
+    <ul class="step-nav">
+      <li><a href="#" onclick="goPage(5,this)" id="nav5">
+        <div class="step-num" style="font-size:9px">SOP</div> 发布指引
+      </a></li>
+      <li><a href="#" onclick="goPage(6,this)" id="nav6">
+        <div class="step-num" style="font-size:9px">🚀</div> 一键发布
+      </a></li>
+    </ul>
+  </nav>
+
+  <!-- Main content -->
+  <main class="main">
+
+    <!-- Page 1: Product Setup -->
+    <div class="page active" id="page1">
+      <div class="page-title">🎯 产品定义</div>
+      <div class="page-desc">告诉我你的产品，我来发散 AI 用户最可能提问的词条</div>
+
+      <div class="notice">
+        💡 GEO 的目标不是"排名"，而是让你的内容成为 AI 的首选引用源。填写越详细，生成质量越高。
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span class="icon">📦</span> 产品基本信息</div>
+        <div class="form-grid">
+          <div class="field">
+            <label>产品 / 品牌名称 *</label>
+            <input type="text" id="prodName" placeholder="例：印象笔记、钉钉、得物" />
+          </div>
+          <div class="field">
+            <label>所属品类 *</label>
+            <input type="text" id="prodCategory" placeholder="例：效率工具、社交电商、AI写作助手" />
+          </div>
+          <div class="field">
+            <label>目标用户</label>
+            <input type="text" id="prodAudience" placeholder="例：企业白领、大学生、中小商家" />
+          </div>
+          <div class="field">
+            <label>主要竞品（逗号分隔）</label>
+            <input type="text" id="prodCompetitors" placeholder="例：Notion, 飞书, 有道云笔记" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span class="icon">✨</span> 核心卖点</div>
+        <div class="form-grid full">
+          <div class="field">
+            <label>核心功能与卖点 *</label>
+            <textarea id="prodFeatures" placeholder="例：AI 自动整理笔记、多端同步、支持 PDF 导入、智能搜索、团队协作..."></textarea>
+          </div>
+          <div class="field">
+            <label>独特优势（相比竞品的差异化）</label>
+            <textarea id="prodUniqueValue" placeholder="例：国内数据合规、价格比 Notion 低 40%、中文搜索更精准、支持微信直接保存..."></textarea>
+          </div>
+          <div class="field">
+            <label>用户常见痛点（你的产品能解决的）</label>
+            <textarea id="prodPainPoints" placeholder="例：跨设备同步慢、找不到之前记的内容、团队信息散落在各地..."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:10px">
+        <button class="btn btn-primary" onclick="startKeywordGen()">生成词条发散 →</button>
+      </div>
+    </div>
+
+    <!-- Page 2: Keyword Expansion -->
+    <div class="page" id="page2">
+      <div class="page-title">🔍 词条发散</div>
+      <div class="page-desc">AI 已根据你的产品，生成以下用户最可能向 AI 提问的词条。勾选后批量生成文章。</div>
+
+      <div class="action-bar">
+        <div class="action-bar-left">
+          <div class="keyword-tabs" id="keywordTabs">
+            <button class="tab-btn active" onclick="filterKeywords('all',this)">全部</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="select-info">已选 <strong id="selectedCount">0</strong> 条</span>
+          <button class="btn btn-sm" onclick="selectAll()">全选</button>
+          <button class="btn btn-sm" onclick="clearAll()">清空</button>
+          <button class="btn btn-primary" id="goGenBtn" onclick="startArticleGen()" disabled>生成文章 →</button>
+        </div>
+      </div>
+
+      <div id="keywordLoading" class="empty" style="display:none">
+        <div class="spinner" style="width:32px;height:32px;margin:0 auto 12px;border-width:3px"></div>
+        <div class="empty-text">正在发散词条，请稍候...</div>
+      </div>
+      <div class="keyword-list" id="keywordList"></div>
+    </div>
+
+    <!-- Page 3: Article Generation -->
+    <div class="page" id="page3">
+      <div class="page-title">✍️ 文章生成</div>
+      <div class="page-desc">逐篇生成 AI 容易引用的结构化文章，内容直接回答用户提问并自然推荐你的产品</div>
+
+      <div id="genStats" style="display:none">
+        <div class="stats-row" id="genStatsRow"></div>
+        <div class="card" style="margin-bottom:20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <span style="font-size:13px;color:var(--text2)">生成进度</span>
+            <span id="genProgressText" style="font-size:13px;color:var(--accent2)">0 / 0</span>
+          </div>
+          <div class="gen-progress">
+            <div class="gen-progress-fill" id="genProgressBar" style="width:0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="articleLoading" class="empty" style="display:none">
+        <div class="spinner" style="width:32px;height:32px;margin:0 auto 12px;border-width:3px"></div>
+        <div class="empty-text">正在生成文章...</div>
+      </div>
+      <div id="articleEmpty" class="empty">
+        <div class="empty-icon">📄</div>
+        <div class="empty-text">请先完成词条发散并选择要生成的词条</div>
+      </div>
+      <div id="articleList"></div>
+    </div>
+
+    <!-- Page 4: Export -->
+    <div class="page" id="page4">
+      <div class="page-title">📦 内容包导出</div>
+      <div class="page-desc">汇总所有生成文章，一键导出可直接用于各平台发布的内容包</div>
+
+      <div id="exportEmpty" class="empty">
+        <div class="empty-icon">📦</div>
+        <div class="empty-text">请先生成文章</div>
+      </div>
+      <div id="exportContent" style="display:none">
+        <div class="stats-row" id="exportStats"></div>
+        <div class="card">
+          <div class="card-title"><span class="icon">📋</span> 内容包预览</div>
+          <div style="display:flex;gap:8px;margin-bottom:14px">
+            <button class="btn btn-green" onclick="exportAll()">⬇️ 导出全部文章（.txt）</button>
+            <button class="btn" onclick="copyAll()">📋 复制全部</button>
+          </div>
+          <div class="export-area">
+            <pre id="exportPreview"></pre>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="icon">🏷️</span> 高频词条汇总（适合做标签/话题）</div>
+          <div id="tagsCloud" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Page 5: SOP -->
+    <div class="page" id="page5">
+      <div class="page-title">📢 各平台发布指引</div>
+      <div class="page-desc">按以下 SOP 在各平台发布，最大化 AI 引用概率</div>
+
+      <div class="notice">
+        💡 字节系平台（今日头条、百家号）对豆包影响最大，优先发；知乎问答和百度经验次之；抖音脚本可提升音视频形式的引用权重。
+      </div>
+
+      <div class="platform-grid">
+        <div class="platform-card">
+          <div class="platform-name">📰 今日头条 / 头条号</div>
+          <div class="platform-desc" style="background:rgba(245,158,11,0.1);color:#fbbf24;padding:4px 8px;border-radius:6px;font-size:11px;display:inline-block;margin-bottom:10px">⭐ 豆包引用优先级最高</div>
+          <ul class="sop-list">
+            <li>标题直接用问题句（"XXX怎么选？"）</li>
+            <li>开篇 100 字给出明确答案，AI 最爱引用开头</li>
+            <li>正文加小标题（H2/H3），方便 AI 切片提取</li>
+            <li>结尾加"总结推荐"段落，含产品名+核心卖点</li>
+            <li>每篇文章附带 3-5 个行业关键词标签</li>
+            <li>发布时间：工作日 7-9 点或 20-22 点</li>
+          </ul>
+        </div>
+
+        <div class="platform-card">
+          <div class="platform-name">🔵 百度百家号</div>
+          <div class="platform-desc" style="background:rgba(99,102,241,0.1);color:var(--accent2);padding:4px 8px;border-radius:6px;font-size:11px;display:inline-block;margin-bottom:10px">📌 文心一言 / 百度 AI 引用源</div>
+          <ul class="sop-list">
+            <li>添加"百度结构化数据"标注（产品 Schema）</li>
+            <li>标题包含精确的长尾词（5-12 字）</li>
+            <li>文章末尾加"相关推荐"锚链到官网</li>
+            <li>每周更新保持内容新鲜度</li>
+            <li>开通百家+认证提升权威权重</li>
+          </ul>
+        </div>
+
+        <div class="platform-card">
+          <div class="platform-name">💬 知乎问答</div>
+          <div class="platform-desc" style="background:rgba(16,185,129,0.1);color:var(--green);padding:4px 8px;border-radius:6px;font-size:11px;display:inline-block;margin-bottom:10px">✅ 高权威源，多个 AI 引用</div>
+          <ul class="sop-list">
+            <li>搜索已有问题，优先回答浏览量大的老问题</li>
+            <li>回答开头用"简单来说"给出 2 句结论</li>
+            <li>用个人亲身体验口吻，避免广告感</li>
+            <li>加入对比表格（你的产品 vs 竞品）</li>
+            <li>发布后在自己的专栏同步一份</li>
+            <li>回答字数 800-1500 字效果最佳</li>
+          </ul>
+        </div>
+
+        <div class="platform-card">
+          <div class="platform-name">📕 小红书</div>
+          <div class="platform-desc" style="background:rgba(239,68,68,0.1);color:var(--red);padding:4px 8px;border-radius:6px;font-size:11px;display:inline-block;margin-bottom:10px">🌸 Z世代消费决策影响力大</div>
+          <ul class="sop-list">
+            <li>标题格式：「痛点词+解决方案」，含表情符号</li>
+            <li>正文用"亲测"、"真实使用X个月"等真实感词</li>
+            <li>必须有图（产品截图/使用场景图，6-9 张）</li>
+            <li>话题标签：#品类词 #产品名 #使用场景</li>
+            <li>评论区置顶官网/下载链接</li>
+            <li>发布后第一小时积极回复评论，提升算法权重</li>
+          </ul>
+        </div>
+
+        <div class="platform-card">
+          <div class="platform-name">🎬 抖音 / 西瓜视频</div>
+          <div class="platform-desc" style="background:rgba(245,158,11,0.1);color:#fbbf24;padding:4px 8px;border-radius:6px;font-size:11px;display:inline-block;margin-bottom:10px">⭐ 与豆包深度打通</div>
+          <ul class="sop-list">
+            <li>用生成的文章改写 60-90 秒口播脚本</li>
+            <li>字幕完整（AI 靠字幕理解视频内容）</li>
+            <li>视频描述复制文章摘要，含核心关键词</li>
+            <li>设置"合集"将同品类内容归组</li>
+            <li>开启"搜索推广"让产品词命中视频</li>
+          </ul>
+        </div>
+
+        <div class="platform-card">
+          <div class="platform-name">💼 微信公众号</div>
+          <div class="platform-desc" style="background:rgba(16,185,129,0.1);color:var(--green);padding:4px 8px;border-radius:6px;font-size:11px;display:inline-block;margin-bottom:10px">🔍 微信搜索 + Kimi 引用源</div>
+          <ul class="sop-list">
+            <li>文章标题含完整长尾词（微信搜索权重高）</li>
+            <li>正文加入结构化小标题（AI 更容易切片）</li>
+            <li>开启"赞赏"和"在看"，高互动文章权重更高</li>
+            <li>在相关微信群转发，提升初始阅读量</li>
+            <li>与同品类账号互推，建立领域权威</li>
+          </ul>
+        </div>
+
+        <div class="platform-card">
+          <div class="platform-name">🌐 自有官网 / 博客</div>
+          <div class="platform-desc" style="background:rgba(99,102,241,0.1);color:var(--accent2);padding:4px 8px;border-radius:6px;font-size:11px;display:inline-block;margin-bottom:10px">🏗️ AI 引用的最终权威锚点</div>
+          <ul class="sop-list">
+            <li>添加 JSON-LD Schema（Product/FAQPage）</li>
+            <li>每篇文章加 canonical 标签防重复</li>
+            <li>robots.txt 允许 AI 爬虫（GPTBot, Bytespider）</li>
+            <li>建立 /faq 页面，结构化问答格式</li>
+            <li>页面加载速度保持 3 秒内（PageSpeed 80+）</li>
+            <li>申请 Google Search Console 验证权威性</li>
+          </ul>
+        </div>
+
+        <div class="platform-card">
+          <div class="platform-name">📊 B站专栏 / 视频</div>
+          <div class="platform-desc" style="background:rgba(99,102,241,0.1);color:var(--accent2);padding:4px 8px;border-radius:6px;font-size:11px;display:inline-block;margin-bottom:10px">🎓 技术/专业类产品权重高</div>
+          <ul class="sop-list">
+            <li>专栏文章直接粘贴生成文章即可</li>
+            <li>视频简介复制文章摘要</li>
+            <li>在视频封面和前 5 秒出现产品名</li>
+            <li>收录到对应分区（科技/生活/知识）</li>
+            <li>开通充电（付费内容信号）提升权威分</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:8px">
+        <div class="card-title"><span class="icon">📅</span> 建议发布节奏（每周）</div>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-top:4px">
+          <div style="text-align:center;padding:10px 0;background:rgba(99,102,241,0.1);border-radius:8px;font-size:12px">
+            <div style="font-weight:700;color:var(--accent2)">周一</div>
+            <div style="color:var(--text3);margin-top:4px">今日头条<br>百家号</div>
+          </div>
+          <div style="text-align:center;padding:10px 0;background:var(--bg3);border-radius:8px;font-size:12px">
+            <div style="font-weight:700;color:var(--text2)">周二</div>
+            <div style="color:var(--text3);margin-top:4px">知乎<br>回答</div>
+          </div>
+          <div style="text-align:center;padding:10px 0;background:rgba(99,102,241,0.1);border-radius:8px;font-size:12px">
+            <div style="font-weight:700;color:var(--accent2)">周三</div>
+            <div style="color:var(--text3);margin-top:4px">公众号<br>B站专栏</div>
+          </div>
+          <div style="text-align:center;padding:10px 0;background:var(--bg3);border-radius:8px;font-size:12px">
+            <div style="font-weight:700;color:var(--text2)">周四</div>
+            <div style="color:var(--text3);margin-top:4px">小红书<br>笔记</div>
+          </div>
+          <div style="text-align:center;padding:10px 0;background:rgba(99,102,241,0.1);border-radius:8px;font-size:12px">
+            <div style="font-weight:700;color:var(--accent2)">周五</div>
+            <div style="color:var(--text3);margin-top:4px">抖音<br>脚本</div>
+          </div>
+          <div style="text-align:center;padding:10px 0;background:var(--bg3);border-radius:8px;font-size:12px">
+            <div style="font-weight:700;color:var(--text2)">周六</div>
+            <div style="color:var(--text3);margin-top:4px">官网<br>博客</div>
+          </div>
+          <div style="text-align:center;padding:10px 0;background:var(--bg3);border-radius:8px;font-size:12px">
+            <div style="font-weight:700;color:var(--text2)">周日</div>
+            <div style="color:var(--text3);margin-top:4px">数据<br>复盘</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Page 6: One-click Publish -->
+    <div class="page" id="page6">
+      <div class="page-title">🚀 一键发布</div>
+      <div class="page-desc">连接本地发布服务，自动将文章发布到各媒体平台</div>
+
+      <!-- Server status -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title"><span class="icon">⚡</span> 发布服务状态</div>
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <div class="api-status" style="font-size:13px">
+            <div class="status-dot" id="serverDot"></div>
+            <span id="serverStatusText">未连接（需先启动本地服务）</span>
+          </div>
+          <button class="btn btn-sm" onclick="checkServer()">🔄 检测连接</button>
+          <div style="font-size:12px;color:var(--text3)">
+            启动方式：进入 <code style="background:var(--bg3);padding:2px 6px;border-radius:4px">geo-publisher/</code> 目录，运行 <code style="background:var(--bg3);padding:2px 6px;border-radius:4px">npm install</code> 然后 <code style="background:var(--bg3);padding:2px 6px;border-radius:4px">node server.js</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- Platform credentials -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title"><span class="icon">🔑</span> 平台账号配置</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:14px">账号密码仅保存在本地 config.json 文件中，不会上传到任何服务器</div>
+
+        <div id="platformConfigs">
+          <!-- 知乎 -->
+          <div class="platform-cred-row" data-platform="zhihu">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <span style="font-size:14px">💬</span>
+              <strong style="font-size:13px">知乎专栏</strong>
+              <span class="tag tag-blue" style="font-size:10px">高权重</span>
+              <div class="status-dot" id="cred-dot-zhihu" style="margin-left:auto"></div>
+              <span id="cred-status-zhihu" style="font-size:11px;color:var(--text3)">未配置</span>
+            </div>
+            <div class="form-grid" style="margin-bottom:10px">
+              <div class="field"><label>账号（手机号/邮箱）</label><input type="text" class="cred-user" placeholder="your@email.com" /></div>
+              <div class="field"><label>密码</label><input type="password" class="cred-pass" placeholder="登录密码" /></div>
+            </div>
+          </div>
+
+          <!-- 今日头条 -->
+          <div class="platform-cred-row" data-platform="toutiao" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <span style="font-size:14px">📰</span>
+              <strong style="font-size:13px">今日头条号</strong>
+              <span class="tag tag-yellow" style="font-size:10px">豆包首选</span>
+              <div class="status-dot" id="cred-dot-toutiao" style="margin-left:auto"></div>
+              <span id="cred-status-toutiao" style="font-size:11px;color:var(--text3)">未配置</span>
+            </div>
+            <div class="form-grid" style="margin-bottom:10px">
+              <div class="field"><label>手机号</label><input type="text" class="cred-user" placeholder="13800000000" /></div>
+              <div class="field"><label>密码</label><input type="password" class="cred-pass" placeholder="登录密码" /></div>
+            </div>
+          </div>
+
+          <!-- 百家号 -->
+          <div class="platform-cred-row" data-platform="baijiahao" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <span style="font-size:14px">🔵</span>
+              <strong style="font-size:13px">百度百家号</strong>
+              <span class="tag tag-blue" style="font-size:10px">文心首选</span>
+              <div class="status-dot" id="cred-dot-baijiahao" style="margin-left:auto"></div>
+              <span id="cred-status-baijiahao" style="font-size:11px;color:var(--text3)">未配置</span>
+            </div>
+            <div class="form-grid" style="margin-bottom:10px">
+              <div class="field"><label>百度账号</label><input type="text" class="cred-user" placeholder="手机号/用户名" /></div>
+              <div class="field"><label>密码</label><input type="password" class="cred-pass" placeholder="登录密码" /></div>
+            </div>
+          </div>
+
+          <!-- 搜狐号 -->
+          <div class="platform-cred-row" data-platform="sohu" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <span style="font-size:14px">🟠</span>
+              <strong style="font-size:13px">搜狐号</strong>
+              <span class="tag tag-yellow" style="font-size:10px">豆包 Top1 来源</span>
+              <div class="status-dot" id="cred-dot-sohu" style="margin-left:auto"></div>
+              <span id="cred-status-sohu" style="font-size:11px;color:var(--text3)">未配置</span>
+            </div>
+            <div class="form-grid" style="margin-bottom:10px">
+              <div class="field"><label>搜狐账号</label><input type="text" class="cred-user" placeholder="账号/邮箱" /></div>
+              <div class="field"><label>密码</label><input type="password" class="cred-pass" placeholder="登录密码" /></div>
+            </div>
+          </div>
+
+          <!-- 微信公众号 -->
+          <div class="platform-cred-row" data-platform="wechat" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <span style="font-size:14px">💚</span>
+              <strong style="font-size:13px">微信公众号</strong>
+              <span class="tag tag-green" style="font-size:10px">元宝 Top1</span>
+              <span class="tag tag-gray" style="font-size:10px">官方API</span>
+              <div class="status-dot" id="cred-dot-wechat" style="margin-left:auto"></div>
+              <span id="cred-status-wechat" style="font-size:11px;color:var(--text3)">未配置</span>
+            </div>
+            <div class="form-grid" style="margin-bottom:10px">
+              <div class="field"><label>AppID</label><input type="text" class="cred-appid" placeholder="wx开头的AppID" /></div>
+              <div class="field"><label>AppSecret</label><input type="password" class="cred-appsecret" placeholder="AppSecret" /></div>
+            </div>
+            <div style="font-size:11px;color:var(--text3)">微信公众号使用官方API，文章会存入草稿箱，需在公众号后台手动发布</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:16px">
+          <button class="btn btn-primary" onclick="saveCredentials()">💾 保存账号配置</button>
+          <button class="btn btn-sm" onclick="clearCookies()" style="color:var(--text3)">清除登录缓存</button>
+        </div>
+      </div>
+
+      <!-- Article publish queue -->
+      <div class="card">
+        <div class="card-title"><span class="icon">📤</span> 文章发布队列</div>
+        <div id="publishQueueEmpty" class="empty" style="padding:30px 0">
+          <div class="empty-icon">📄</div>
+          <div class="empty-text">请先生成文章（步骤 3）</div>
+        </div>
+        <div id="publishQueue" style="display:none">
+          <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+            <div style="font-size:13px;color:var(--text2);margin-right:auto;align-self:center">选择要发布到的平台：</div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="pub-platform-check" value="zhihu" checked> 知乎</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="pub-platform-check" value="toutiao" checked> 头条</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="pub-platform-check" value="baijiahao"> 百家号</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="pub-platform-check" value="sohu"> 搜狐</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="pub-platform-check" value="wechat"> 公众号</label>
+          </div>
+          <div id="publishArticleList"></div>
+          <div style="margin-top:14px;display:flex;gap:10px">
+            <button class="btn btn-green" onclick="publishAll()">🚀 一键发布全部文章</button>
+            <div style="font-size:12px;color:var(--text3);align-self:center">会逐篇自动打开浏览器完成发布，验证码需手动处理</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Publish log -->
+      <div class="card" id="publishLogCard" style="display:none;margin-top:16px">
+        <div class="card-title"><span class="icon">📋</span> 发布日志</div>
+        <div id="publishLog" style="background:var(--bg);border-radius:8px;padding:12px;font-size:12px;color:var(--text2);max-height:300px;overflow-y:auto;font-family:monospace;line-height:1.8"></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ===================== State =====================
+const state = {
+  apiKey: '',
+  apiProvider: 'openai',
+  apiBaseUrl: '',
+  model: 'gpt-4o-mini',
+  product: {},
+  keywords: [],
+  articles: [],
+  currentFilter: 'all',
+};
+
+const TYPE_LABELS = {
+  solution: { label: '解决方案型', color: 'tag-blue' },
+  comparison: { label: '对比选择型', color: 'tag-yellow' },
+  scenario: { label: '使用场景型', color: 'tag-green' },
+  category: { label: '品类认知型', color: 'tag-gray' },
+  review: { label: '评测口碑型', color: 'tag-red' },
+};
+
+function escapeHTML(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[ch]));
+}
+
+function safeType(value) {
+  return String(value || 'category').replace(/[^a-z_-]/gi, '') || 'category';
+}
+
+function clampPercent(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 70;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+// ===================== Navigation =====================
+function goPage(n, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.step-nav a').forEach(a => a.classList.remove('active'));
+  document.getElementById('page' + n).classList.add('active');
+  if (el) el.classList.add('active');
+  else document.getElementById('nav' + n).classList.add('active');
+  return false;
+}
+
+// ===================== API Config =====================
+function openApiModal() {
+  if (state.apiKey) document.getElementById('apiKeyInput').value = state.apiKey;
+  document.getElementById('apiModal').classList.add('open');
+}
+function closeApiModal() { document.getElementById('apiModal').classList.remove('open'); }
+function updateApiPlaceholder() {
+  const p = document.getElementById('apiProvider').value;
+  document.getElementById('customUrlField').style.display = p === 'custom' ? 'block' : 'none';
+}
+function saveApiConfig() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  const provider = document.getElementById('apiProvider').value;
+  const modelVal = document.getElementById('modelSelect').value;
+  const customModelVal = document.getElementById('customModel').value.trim();
+  const customUrl = document.getElementById('customUrl').value.trim();
+
+  if (!key) { alert('请输入 API Key'); return; }
+  state.apiKey = key;
+  state.apiProvider = provider;
+  state.model = modelVal === 'custom' ? customModelVal : modelVal;
+  state.apiBaseUrl = provider === 'custom' ? customUrl : '';
+
+  document.getElementById('apiDot').classList.add('ok');
+  document.getElementById('apiStatusText').textContent = `已配置 · ${state.model}`;
+  closeApiModal();
+}
+
+document.getElementById('modelSelect').addEventListener('change', function() {
+  document.getElementById('customModelField').style.display = this.value === 'custom' ? 'block' : 'none';
+});
+
+// ===================== API Call =====================
+async function callAI(messages, onChunk) {
+  if (!state.apiKey) throw new Error('请先配置 API Key');
+
+  let baseUrl = 'https://api.openai.com/v1';
+  if (state.apiProvider === 'anthropic') baseUrl = 'https://api.anthropic.com/v1';
+  if (state.apiProvider === 'custom' && state.apiBaseUrl) baseUrl = state.apiBaseUrl;
+
+  const isAnthropic = state.apiProvider === 'anthropic';
+
+  if (isAnthropic) {
+    // Anthropic API format
+    const sysMsg = messages.find(m => m.role === 'system');
+    const userMsgs = messages.filter(m => m.role !== 'system');
+    const body = {
+      model: state.model,
+      max_tokens: 4096,
+      stream: !!onChunk,
+      messages: userMsgs,
+      ...(sysMsg ? { system: sysMsg.content } : {}),
+    };
+    const res = await fetch(baseUrl + '/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': state.apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) { const t = await res.text(); throw new Error(t); }
+    if (!onChunk) { const d = await res.json(); return d.content[0].text; }
+    const reader = res.body.getReader(); const decoder = new TextDecoder(); let full = '';
+    while (true) {
+      const { done, value } = await reader.read(); if (done) break;
+      const lines = decoder.decode(value).split('\n');
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        const json = line.slice(5).trim();
+        if (json === '[DONE]' || !json) continue;
+        try { const d = JSON.parse(json); if (d.delta?.text) { full += d.delta.text; onChunk(d.delta.text); } } catch{}
+      }
+    }
+    return full;
+  } else {
+    // OpenAI format
+    const body = { model: state.model, messages, max_tokens: 4096, stream: !!onChunk };
+    const res = await fetch(baseUrl + '/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.apiKey },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) { const t = await res.text(); throw new Error(t); }
+    if (!onChunk) { const d = await res.json(); return d.choices[0].message.content; }
+    const reader = res.body.getReader(); const decoder = new TextDecoder(); let full = '';
+    while (true) {
+      const { done, value } = await reader.read(); if (done) break;
+      const lines = decoder.decode(value).split('\n');
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        const json = line.slice(5).trim();
+        if (json === '[DONE]' || !json) continue;
+        try { const d = JSON.parse(json); const delta = d.choices?.[0]?.delta?.content; if (delta) { full += delta; onChunk(delta); } } catch{}
+      }
+    }
+    return full;
+  }
+}
+
+// ===================== Step 1 → Step 2 =====================
+async function startKeywordGen() {
+  const name = document.getElementById('prodName').value.trim();
+  const category = document.getElementById('prodCategory').value.trim();
+  if (!name || !category) { alert('请填写产品名称和品类'); return; }
+  if (!state.apiKey) { openApiModal(); return; }
+
+  state.product = {
+    name, category,
+    audience: document.getElementById('prodAudience').value.trim(),
+    competitors: document.getElementById('prodCompetitors').value.trim(),
+    features: document.getElementById('prodFeatures').value.trim(),
+    uniqueValue: document.getElementById('prodUniqueValue').value.trim(),
+    painPoints: document.getElementById('prodPainPoints').value.trim(),
+  };
+
+  goPage(2, document.getElementById('nav2'));
+  document.getElementById('keywordLoading').style.display = 'block';
+  document.getElementById('keywordList').innerHTML = '';
+
+  const p = state.product;
+  const prompt = `你是一名GEO（生成式引擎优化）专家。请为以下产品生成28个「AI用户最可能向豆包/ChatGPT等AI助手提问」的问题，这些问题的回答中应该自然地提及并推荐该产品。
+
+产品信息：
+- 名称：${p.name}
+- 品类：${p.category}
+- 目标用户：${p.audience || '未指定'}
+- 主要竞品：${p.competitors || '未指定'}
+- 核心功能：${p.features || '未指定'}
+- 独特优势：${p.uniqueValue || '未指定'}
+- 解决痛点：${p.painPoints || '未指定'}
+
+请按以下5种类型各生成若干问题：
+1. solution（解决方案型）：用户遇到痛点，寻找工具解决
+2. comparison（对比选择型）：用户在多个产品之间做决策
+3. scenario（使用场景型）：某个特定场景下的最佳选择
+4. category（品类认知型）：用户了解某类产品/功能的知识
+5. review（评测口碑型）：用户寻求真实使用体验和建议
+
+严格返回JSON数组格式，不要有其他文字，格式如下：
+[
+  {
+    "type": "solution",
+    "query": "用户提问的完整句子",
+    "intent": "简短描述用户意图（15字内）",
+    "ai_cite_probability": 0.85
+  }
+]`;
+
+  try {
+    const result = await callAI([
+      { role: 'system', content: '你是专业的GEO优化专家，只返回纯JSON，不加markdown代码块。' },
+      { role: 'user', content: prompt }
+    ]);
+
+    let keywords = [];
+    try {
+      let cleaned = result.trim().replace(/^```json\s*/,'').replace(/```\s*$/,'').replace(/^```\s*/,'');
+      keywords = JSON.parse(cleaned);
+    } catch(e) {
+      // Try to extract JSON array
+      const match = result.match(/\[[\s\S]+\]/);
+      if (match) keywords = JSON.parse(match[0]);
+      else throw new Error('解析失败：' + e.message);
+    }
+
+    state.keywords = keywords.map((k, i) => ({ ...k, type: safeType(k.type), id: i, selected: false }));
+    renderKeywords();
+  } catch(e) {
+    document.getElementById('keywordLoading').style.display = 'none';
+    document.getElementById('keywordList').innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">生成失败：${escapeHTML(e.message)}</div></div>`;
+  }
+}
+
+function renderKeywords() {
+  document.getElementById('keywordLoading').style.display = 'none';
+  const filter = state.currentFilter;
+
+  // Build tabs
+  const types = [...new Set(state.keywords.map(k => safeType(k.type)))];
+  const tabsEl = document.getElementById('keywordTabs');
+  tabsEl.innerHTML = `<button class="tab-btn ${filter==='all'?'active':''}" onclick="filterKeywords('all',this)">全部 (${state.keywords.length})</button>`;
+  types.forEach(t => {
+    const count = state.keywords.filter(k => k.type === t).length;
+    const label = TYPE_LABELS[t]?.label || t;
+    tabsEl.innerHTML += `<button class="tab-btn ${filter===t?'active':''}" onclick="filterKeywords('${t}',this)">${escapeHTML(label)} (${count})</button>`;
+  });
+
+  const filtered = filter === 'all' ? state.keywords : state.keywords.filter(k => k.type === filter);
+  const listEl = document.getElementById('keywordList');
+  listEl.innerHTML = filtered.map(k => {
+    const type = safeType(k.type);
+    const tl = TYPE_LABELS[type] || { label: type, color: 'tag-gray' };
+    const prob = clampPercent((k.ai_cite_probability || 0.7) * 100);
+    const probColor = prob >= 80 ? '#10b981' : prob >= 60 ? '#f59e0b' : '#ef4444';
+    return `
+    <div class="keyword-item ${k.selected?'selected':''}" onclick="toggleKeyword(${k.id})">
+      <div class="keyword-check"></div>
+      <div class="keyword-body">
+        <div class="keyword-query">${escapeHTML(k.query)}</div>
+        <div class="keyword-meta">
+          <span class="tag ${tl.color}">${escapeHTML(tl.label)}</span>
+          <span>${escapeHTML(k.intent)}</span>
+          <div class="prob-bar">
+            AI引用率 ${prob}%
+            <div class="prob-track"><div class="prob-fill" style="width:${prob}%;background:${probColor}"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  updateSelectedCount();
+}
+
+function filterKeywords(type, el) {
+  state.currentFilter = type;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  renderKeywords();
+}
+
+function toggleKeyword(id) {
+  const kw = state.keywords.find(k => k.id === id);
+  if (kw) kw.selected = !kw.selected;
+  renderKeywords();
+}
+
+function selectAll() {
+  const filtered = state.currentFilter === 'all' ? state.keywords : state.keywords.filter(k => k.type === state.currentFilter);
+  filtered.forEach(k => k.selected = true);
+  renderKeywords();
+}
+function clearAll() {
+  state.keywords.forEach(k => k.selected = false);
+  renderKeywords();
+}
+
+function updateSelectedCount() {
+  const count = state.keywords.filter(k => k.selected).length;
+  document.getElementById('selectedCount').textContent = count;
+  document.getElementById('goGenBtn').disabled = count === 0;
+}
+
+// ===================== Step 2 → Step 3 =====================
+async function startArticleGen() {
+  const selected = state.keywords.filter(k => k.selected);
+  if (!selected.length) return;
+
+  state.articles = selected.map(k => ({ keyword: k, title: '', summary: '', article: '', platforms: [], tags: [], status: 'pending' }));
+
+  goPage(3, document.getElementById('nav3'));
+  document.getElementById('articleEmpty').style.display = 'none';
+  document.getElementById('genStats').style.display = 'block';
+  renderArticleList();
+  updateGenProgress();
+
+  // Generate one by one
+  for (let i = 0; i < state.articles.length; i++) {
+    state.articles[i].status = 'generating';
+    renderArticleList();
+    try {
+      await generateArticle(i);
+      state.articles[i].status = 'done';
+    } catch(e) {
+      state.articles[i].status = 'error';
+      state.articles[i].error = e.message;
+    }
+    updateGenProgress();
+    renderArticleList();
+  }
+
+  // Auto-update export
+  updateExportPage();
+}
+
+async function generateArticle(idx) {
+  const art = state.articles[idx];
+  const p = state.product;
+  const k = art.keyword;
+
+  const prompt = `你是一名专业的GEO内容专家，专门撰写能被豆包、ChatGPT等AI助手优先引用的权威内容。
+
+用户提问：「${k.query}」
+问题意图：${k.intent}
+
+产品信息：
+- 产品名：${p.name}
+- 品类：${p.category}
+- 核心功能：${p.features || '未指定'}
+- 独特优势：${p.uniqueValue || '未指定'}
+- 目标用户：${p.audience || '未指定'}
+- 竞品：${p.competitors || '未指定'}
+
+写作要求：
+1. 文章约 800-1000 字
+2. 开篇前 2 句话直接给出核心结论（AI 最爱引用的位置）
+3. 用结构化小标题（## 格式）便于 AI 切片提取
+4. 自然提及并推荐「${p.name}」2-3 次，不硬广
+5. 语气：客观权威，像来自行业媒体的报告
+6. 包含具体数据/对比/使用场景案例
+7. 结尾有「总结推荐」段落，含产品名+核心优势
+
+返回纯JSON，不加代码块，格式：
+{
+  "title": "文章标题（含核心关键词，25字内）",
+  "summary": "100字以内摘要，直接回答问题并提及产品",
+  "article": "完整文章正文（markdown格式，用##小标题）",
+  "platforms": ["今日头条", "知乎", "百家号"],
+  "tags": ["标签1", "标签2", "标签3", "标签4", "标签5"]
+}`;
+
+  const result = await callAI([
+    { role: 'system', content: '你是GEO内容专家，只返回纯JSON，不加markdown代码块或其他说明。' },
+    { role: 'user', content: prompt }
+  ]);
+
+  let parsed;
+  try {
+    let cleaned = result.trim().replace(/^```json\s*/,'').replace(/```\s*$/,'').replace(/^```\s*/,'');
+    parsed = JSON.parse(cleaned);
+  } catch(e) {
+    const match = result.match(/\{[\s\S]+\}/);
+    if (match) parsed = JSON.parse(match[0]);
+    else throw new Error('解析失败');
+  }
+
+  art.title = parsed.title || k.query;
+  art.summary = parsed.summary || '';
+  art.article = parsed.article || '';
+  art.platforms = parsed.platforms || [];
+  art.tags = parsed.tags || [];
+}
+
+function updateGenProgress() {
+  const total = state.articles.length;
+  const done = state.articles.filter(a => a.status === 'done' || a.status === 'error').length;
+  const errors = state.articles.filter(a => a.status === 'error').length;
+  const pct = total ? Math.round(done / total * 100) : 0;
+
+  document.getElementById('genProgressBar').style.width = pct + '%';
+  document.getElementById('genProgressText').textContent = `${done} / ${total}`;
+
+  document.getElementById('genStatsRow').innerHTML = `
+    <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-label">待生成</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--green)">${done - errors}</div><div class="stat-label">已完成</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--yellow)">${total - done}</div><div class="stat-label">进行中</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--red)">${errors}</div><div class="stat-label">失败</div></div>
+  `;
+}
+
+function renderArticleList() {
+  const listEl = document.getElementById('articleList');
+  listEl.innerHTML = state.articles.map((art, i) => {
+    const type = safeType(art.keyword.type);
+    const tl = TYPE_LABELS[type] || { label: type, color: 'tag-gray' };
+    let statusHtml = '';
+    if (art.status === 'generating') statusHtml = `<div class="article-status"><div class="spinner"></div> 生成中...</div>`;
+    else if (art.status === 'done') statusHtml = `<div class="article-status" style="color:var(--green)">✓ 已完成</div>`;
+    else if (art.status === 'error') statusHtml = `<div class="article-status" style="color:var(--red)">✕ 失败: ${escapeHTML(art.error)}</div>`;
+    else statusHtml = `<div class="article-status" style="color:var(--text3)">⏳ 等待中</div>`;
+
+    const platformTags = (art.platforms || []).map(p => `<span class="tag tag-gray">${escapeHTML(p)}</span>`).join('');
+    const tagTags = (art.tags || []).map(t => `<span class="tag tag-blue">#${escapeHTML(t)}</span>`).join('');
+
+    return `
+    <div class="article-card">
+      <div class="article-header">
+        <div class="article-title">${escapeHTML(art.title || art.keyword.query)}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="tag ${tl.color}">${escapeHTML(tl.label)}</span>
+          ${statusHtml}
+        </div>
+      </div>
+      ${art.summary ? `
+      <div class="article-body">
+        <div class="article-summary">${escapeHTML(art.summary)}</div>
+        ${art.article ? `<div class="article-content" id="artContent${i}">${escapeHTML(art.article)}</div>` : ''}
+      </div>
+      <div class="article-footer">
+        ${platformTags}
+        ${tagTags}
+        ${art.article ? `
+        <div style="margin-left:auto;display:flex;gap:6px">
+          <button class="btn btn-sm" onclick="toggleArticle(${i})">展开全文</button>
+          <button class="btn btn-sm btn-primary" onclick="copyArticle(${i})">复制文章</button>
+        </div>` : ''}
+      </div>
+      ` : ''}
+    </div>`;
+  }).join('');
+}
+
+function toggleArticle(i) {
+  const el = document.getElementById('artContent' + i);
+  if (!el) return;
+  const isOpen = el.classList.contains('open');
+  el.classList.toggle('open');
+  el.previousElementSibling && (el.previousElementSibling.style.display = isOpen ? 'block' : 'none');
+  event.target.textContent = isOpen ? '展开全文' : '收起全文';
+}
+
+function copyArticle(i) {
+  const art = state.articles[i];
+  const text = `# ${art.title}\n\n${art.summary}\n\n---\n\n${art.article}\n\n---\n推荐发布平台：${(art.platforms||[]).join('、')}\n标签：${(art.tags||[]).map(t=>'#'+t).join(' ')}`;
+  navigator.clipboard.writeText(text).then(() => { event.target.textContent = '已复制！'; setTimeout(() => event.target.textContent = '复制文章', 1500); });
+}
+
+// ===================== Step 4: Export =====================
+function updateExportPage() {
+  const done = state.articles.filter(a => a.status === 'done');
+  if (!done.length) return;
+
+  document.getElementById('exportEmpty').style.display = 'none';
+  document.getElementById('exportContent').style.display = 'block';
+
+  document.getElementById('exportStats').innerHTML = `
+    <div class="stat-card"><div class="stat-num" style="color:var(--green)">${done.length}</div><div class="stat-label">篇文章</div></div>
+    <div class="stat-card"><div class="stat-num">${done.reduce((s,a) => s + (a.article?.split(/\s+/).length || 0), 0).toLocaleString()}</div><div class="stat-label">总字数</div></div>
+    <div class="stat-card"><div class="stat-num">${[...new Set(done.flatMap(a => a.platforms))].length}</div><div class="stat-label">适配平台</div></div>
+    <div class="stat-card"><div class="stat-num">${[...new Set(done.flatMap(a => a.tags))].length}</div><div class="stat-label">关键词</div></div>
+  `;
+
+  const preview = done.map((art, i) => `======== 文章 ${i+1} ========\n【标题】${art.title}\n【摘要】${art.summary}\n\n${art.article}\n\n【推荐平台】${(art.platforms||[]).join('、')}\n【标签】${(art.tags||[]).map(t=>'#'+t).join(' ')}\n`).join('\n');
+  document.getElementById('exportPreview').textContent = preview;
+
+  const allTags = done.flatMap(a => a.tags);
+  const tagFreq = {};
+  allTags.forEach(t => tagFreq[t] = (tagFreq[t] || 0) + 1);
+  const sortedTags = Object.entries(tagFreq).sort((a,b) => b[1]-a[1]).slice(0, 30);
+  document.getElementById('tagsCloud').innerHTML = sortedTags.map(([tag, freq]) =>
+    `<span class="tag tag-blue" style="font-size:${Math.min(14, 10 + freq * 1.5)}px">#${escapeHTML(tag)}</span>`
+  ).join('');
+}
+
+function exportAll() {
+  const done = state.articles.filter(a => a.status === 'done');
+  const text = `GEO Studio 内容包\n产品：${state.product.name}\n生成时间：${new Date().toLocaleString('zh-CN')}\n共 ${done.length} 篇文章\n${'='.repeat(50)}\n\n` +
+    done.map((art, i) => `文章 ${i+1}\n标题：${art.title}\n摘要：${art.summary}\n\n${art.article}\n\n推荐平台：${(art.platforms||[]).join('、')}\n标签：${(art.tags||[]).map(t=>'#'+t).join(' ')}\n\n${'─'.repeat(40)}\n`).join('\n');
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `GEO内容包_${state.product.name}_${Date.now()}.txt`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function copyAll() {
+  const text = document.getElementById('exportPreview').textContent;
+  navigator.clipboard.writeText(text).then(() => { event.target.textContent = '已复制！'; setTimeout(() => event.target.textContent = '📋 复制全部', 1500); });
+}
+
+// Mark done steps
+function markNavDone(n) {
+  document.getElementById('nav' + n).classList.add('done');
+}
+
+// Override goPage to also update export + publish queue
+const _origGoPage = goPage;
+window.goPage = function(n, el) {
+  if (n === 4) updateExportPage();
+  if (n === 6) { updatePublishQueue(); checkServer(); loadCredentialsFromServer(); }
+  return _origGoPage(n, el);
+}
+
+// ===================== 一键发布模块 =====================
+const SERVER = 'http://localhost:3001';
+
+// 检测本地发布服务
+async function checkServer() {
+  const dot = document.getElementById('serverDot');
+  const txt = document.getElementById('serverStatusText');
+  try {
+    const res = await fetch(SERVER + '/api/status', { signal: AbortSignal.timeout(3000) });
+    const data = await res.json();
+    dot.classList.add('ok');
+    const configured = data.configured || [];
+    txt.textContent = `已连接 · 已配置平台：${configured.length > 0 ? configured.join('、') : '无'}`;
+  } catch {
+    dot.classList.remove('ok');
+    txt.textContent = '未连接（请先运行 node server.js）';
+  }
+}
+
+// 从服务端加载凭证状态（脱敏展示）
+async function loadCredentialsFromServer() {
+  try {
+    const res = await fetch(SERVER + '/api/config');
+    const data = await res.json();
+    const platforms = data.platforms || {};
+    const map = { zhihu: 'zhihu', toutiao: 'toutiao', baijiahao: 'baijiahao', sohu: 'sohu', wechat: 'wechat' };
+    for (const [p] of Object.entries(map)) {
+      const creds = platforms[p];
+      const dot = document.getElementById('cred-dot-' + p);
+      const txt = document.getElementById('cred-status-' + p);
+      if (!dot) continue;
+      const hasAuth = creds?.username || creds?.appId;
+      if (hasAuth) {
+        dot.classList.add('ok');
+        txt.textContent = '已配置';
+        txt.style.color = 'var(--green)';
+        // 填充用户名（不填密码，保持安全）
+        const row = document.querySelector(`[data-platform="${p}"]`);
+        if (row) {
+          const userEl = row.querySelector('.cred-user, .cred-appid');
+          if (userEl && (creds.username || creds.appId)) userEl.value = creds.username || creds.appId;
+        }
+      } else {
+        dot.classList.remove('ok');
+        txt.textContent = '未配置';
+        txt.style.color = 'var(--text3)';
+      }
+    }
+  } catch {}
+}
+
+// 保存凭证到本地服务
+async function saveCredentials() {
+  const platforms = {};
+  document.querySelectorAll('.platform-cred-row').forEach(row => {
+    const p = row.dataset.platform;
+    const userEl = row.querySelector('.cred-user, .cred-appid');
+    const passEl = row.querySelector('.cred-pass, .cred-appsecret');
+    if (!userEl) return;
+    const user = userEl.value.trim();
+    const pass = passEl?.value.trim() || '';
+    if (!user) return;
+    if (p === 'wechat') {
+      platforms[p] = { appId: user, appSecret: pass };
+    } else {
+      platforms[p] = { username: user, password: pass };
+    }
+  });
+
+  try {
+    const res = await fetch(SERVER + '/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platforms }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      alert('✅ 账号配置已保存到本地 config.json');
+      await loadCredentialsFromServer();
+      await checkServer();
+    }
+  } catch (e) {
+    alert('❌ 保存失败，请确认发布服务已启动：' + e.message);
+  }
+}
+
+// 清除 Cookie 缓存
+async function clearCookies() {
+  const platforms = ['zhihu', 'toutiao', 'baijiahao', 'sohu'];
+  if (!confirm(`将清除所有平台的登录缓存（${platforms.join(', ')}），下次发布需重新登录，确认吗？`)) return;
+  try {
+    await Promise.all(platforms.map(p => fetch(SERVER + '/api/cookies/' + p, { method: 'DELETE' })));
+    alert('✅ 登录缓存已清除');
+  } catch (e) {
+    alert('清除失败：' + e.message);
+  }
+}
+
+// 更新发布队列显示
+function updatePublishQueue() {
+  const done = state.articles.filter(a => a.status === 'done');
+  const emptyEl = document.getElementById('publishQueueEmpty');
+  const queueEl = document.getElementById('publishQueue');
+
+  if (!done.length) {
+    emptyEl.style.display = 'block';
+    queueEl.style.display = 'none';
+    return;
+  }
+  emptyEl.style.display = 'none';
+  queueEl.style.display = 'block';
+
+  document.getElementById('publishArticleList').innerHTML = done.map((art, i) => `
+    <div class="article-card" style="margin-bottom:10px" id="pub-art-${i}">
+      <div class="article-header">
+        <div class="article-title" style="font-size:13px">${escapeHTML(art.title)}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div id="pub-status-${i}" style="font-size:12px;color:var(--text3)">待发布</div>
+          <button class="btn btn-sm btn-primary" onclick="publishSingle(${i})">发布此篇</button>
+        </div>
+      </div>
+      <div id="pub-log-${i}" style="display:none;padding:10px 16px;font-size:11px;font-family:monospace;color:var(--text2);background:var(--bg);line-height:1.8;max-height:150px;overflow-y:auto"></div>
+    </div>
+  `).join('');
+}
+
+// 获取选中的平台
+function getSelectedPlatforms() {
+  return [...document.querySelectorAll('.pub-platform-check:checked')].map(c => c.value);
+}
+
+// 发布单篇文章到所有选中平台
+async function publishSingle(idx) {
+  const done = state.articles.filter(a => a.status === 'done');
+  const art = done[idx];
+  if (!art) return;
+
+  const platforms = getSelectedPlatforms();
+  if (!platforms.length) { alert('请至少选择一个发布平台'); return; }
+
+  const statusEl = document.getElementById('pub-status-' + idx);
+  const logEl = document.getElementById('pub-log-' + idx);
+  logEl.style.display = 'block';
+  document.getElementById('publishLogCard').style.display = 'block';
+
+  const addToLog = (msg) => {
+    const globalLog = document.getElementById('publishLog');
+    const entry = `[${new Date().toLocaleTimeString('zh-CN')}] ${msg}`;
+    logEl.textContent += entry + '\n';
+    globalLog.textContent += entry + '\n';
+    logEl.scrollTop = logEl.scrollHeight;
+    globalLog.scrollTop = globalLog.scrollHeight;
+  };
+
+  statusEl.textContent = '发布中...';
+  statusEl.style.color = 'var(--yellow)';
+
+  for (const platform of platforms) {
+    addToLog(`▶ 开始发布到 ${platform}...`);
+    try {
+      const res = await fetch(SERVER + '/api/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platform,
+          title: art.title,
+          content: art.article,
+          summary: art.summary,
+          tags: art.tags,
+        }),
+      });
+      const { jobId, error } = await res.json();
+      if (error) throw new Error(error);
+
+      // 轮询任务状态
+      await pollJob(jobId, addToLog);
+    } catch (e) {
+      addToLog(`❌ ${platform} 发布失败：${e.message}`);
+    }
+  }
+
+  statusEl.textContent = '已完成';
+  statusEl.style.color = 'var(--green)';
+}
+
+// 轮询任务状态
+async function pollJob(jobId, addToLog) {
+  let lastLogLen = 0;
+  for (let i = 0; i < 120; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const res = await fetch(SERVER + '/api/job/' + jobId);
+      const job = await res.json();
+
+      // 输出新日志
+      const newLogs = (job.log || []).slice(lastLogLen);
+      newLogs.forEach(l => addToLog(l));
+      lastLogLen = (job.log || []).length;
+
+      if (job.status === 'done') return job.result;
+      if (job.status === 'error') throw new Error(job.error);
+    } catch (e) {
+      if (e.message && !e.message.includes('fetch')) throw e;
+    }
+  }
+  throw new Error('超时：发布超过 4 分钟');
+}
+
+// 一键发布全部文章
+async function publishAll() {
+  const done = state.articles.filter(a => a.status === 'done');
+  if (!done.length) { alert('没有可发布的文章'); return; }
+  const platforms = getSelectedPlatforms();
+  if (!platforms.length) { alert('请至少选择一个发布平台'); return; }
+  if (!confirm(`将把 ${done.length} 篇文章发布到：${platforms.join('、')}\n\n浏览器会依次打开，请保持在旁边处理验证码。确认开始？`)) return;
+
+  for (let i = 0; i < done.length; i++) {
+    await publishSingle(i);
+  }
+}
+
+// 页面加载时自动检测服务
+setTimeout(checkServer, 1000);
+</script>
+</body>
+</html>

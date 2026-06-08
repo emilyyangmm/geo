@@ -1,0 +1,5 @@
+geo-publisher/node_modules/
+geo-publisher/config.json
+geo-publisher/cookies/
+.DS_Store
+*.log
