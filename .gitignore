@@ -1,5 +1,6 @@
 geo-publisher/node_modules/
 geo-publisher/config.json
 geo-publisher/cookies/
+deploy/certs/
 .DS_Store
 *.log
