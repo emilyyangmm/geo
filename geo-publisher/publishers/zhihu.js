@@ -5,6 +5,34 @@
 
 const { launchBrowser, saveCookies, loadCookies, mdToHtml, waitForManualAction } = require('./base');
 
+async function switchToPasswordLogin(page) {
+  await page.waitForSelector('.SignFlow-tab', { timeout: 10000 });
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const tabs = await page.$$('.SignFlow-tab');
+    const tab = tabs[tabs.length - 1];
+    if (tab) {
+      await tab.hover();
+      await page.waitForTimeout(300);
+      await tab.click({ delay: 100 });
+      await page.waitForTimeout(2000);
+      if (await page.$('input[name="password"], input[type="password"]')) return;
+
+      const box = await tab.boundingBox();
+      if (box) {
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        await page.waitForTimeout(2000);
+      }
+      if (await page.$('input[name="password"], input[type="password"]')) return;
+    }
+  }
+
+  const inputs = await page.evaluate(() => [...document.querySelectorAll('input')]
+    .map(el => `${el.name || '(no-name)'}:${el.type}:${el.placeholder || ''}`)
+    .join(' / '));
+  throw new Error(`无法切换到知乎密码登录，当前输入框：${inputs || '无'}`);
+}
+
 async function publish({ title, content, summary, tags, creds, cookiePath, addLog }) {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -28,18 +56,17 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
 
     if (!isLoggedIn) {
       addLog('未登录，正在填写账号密码...');
-      await page.goto('https://www.zhihu.com/signin', { waitUntil: 'domcontentloaded' });
+      await page.goto('https://www.zhihu.com/signin', { waitUntil: 'networkidle2' });
+      await page.waitForTimeout(1000);
       await page.waitForSelector('input[name="username"]', { timeout: 10000 });
 
       // 切换到账号密码登录
-      const pwdTab = await page.$('.SignFlow-tab:last-child');
-      if (pwdTab) await pwdTab.click();
-      await page.waitForTimeout(500);
+      await switchToPasswordLogin(page);
 
       await page.click('input[name="username"]');
       await page.type('input[name="username"]', creds.username, { delay: 50 });
-      await page.click('input[name="password"]');
-      await page.type('input[name="password"]', creds.password, { delay: 50 });
+      await page.click('input[name="password"], input[type="password"]');
+      await page.type('input[name="password"], input[type="password"]', creds.password, { delay: 50 });
       await page.click('button[type="submit"]');
 
       addLog('已提交登录，等待验证（如有验证码请手动处理）...');
