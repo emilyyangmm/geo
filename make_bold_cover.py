@@ -123,7 +123,7 @@ LOGOS = {
     "kimi": ("kimi.ico", "Kimi"),
     "qwen": ("qwen-icon.png", "通义千问"),
     "yuanbao": ("yuanbao.ico", "元宝"),
-    "zhipu": ("zhipu.ico", "智谱"),
+    "wenxin": ("wenxin.ico", "文心一言"),
 }
 
 
@@ -184,14 +184,14 @@ def main():
     slanted_banner(d, 590, 510, 262, 72, "口碑建设", (122, 255, 89), (7, 19, 37), 37)
 
     # AI platform logo badges
-    brands = ["doubao", "deepseek", "kimi", "qwen", "yuanbao", "zhipu"]
+    brands = ["doubao", "deepseek", "kimi", "qwen", "yuanbao", "wenxin"]
     for i, brand in enumerate(brands):
         ai_logo_icon(img, d, 112 + i * 136, 672, brand)
 
     # Bottom slogan pill
     add_glow(img, lambda gd, c: gd.rounded_rectangle((36, 770, 864, 846), radius=38, fill=(124, 255, 52, 110)), blur=16)
     rounded(d, (34, 768, 866, 848), 40, (183, 255, 48), (232, 255, 165), 3)
-    fit_text(d, (450, 807), "让您的品牌、产品躺进AI答案里！", 770, 48, 30, (0, 8, 18), True, "mm")
+    fit_text(d, (450, 807), "客户搜问题时，先看到你的品牌！", 770, 48, 30, (0, 8, 18), True, "mm")
 
     # Extra trust strip
     rounded(d, (118, 858, 782, 890), 16, (0, 0, 0, 145), (0, 230, 255, 120), 1)
