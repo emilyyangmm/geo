@@ -22,34 +22,6 @@ async function waitForZhihuLogin(page, addLog, timeout = 120000) {
   return false;
 }
 
-async function switchToPasswordLogin(page) {
-  await page.waitForSelector('.SignFlow-tab', { timeout: 10000 });
-
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const tabs = await page.$$('.SignFlow-tab');
-    const tab = tabs[tabs.length - 1];
-    if (tab) {
-      await tab.hover();
-      await page.waitForTimeout(300);
-      await tab.click({ delay: 100 });
-      await page.waitForTimeout(2000);
-      if (await page.$('input[name="password"], input[type="password"]')) return;
-
-      const box = await tab.boundingBox();
-      if (box) {
-        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-        await page.waitForTimeout(2000);
-      }
-      if (await page.$('input[name="password"], input[type="password"]')) return;
-    }
-  }
-
-  const inputs = await page.evaluate(() => [...document.querySelectorAll('input')]
-    .map(el => `${el.name || '(no-name)'}:${el.type}:${el.placeholder || ''}`)
-    .join(' / '));
-  throw new Error(`无法切换到知乎密码登录，当前输入框：${inputs || '无'}`);
-}
-
 async function publish({ title, content, summary, tags, creds, cookiePath, addLog }) {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -74,21 +46,16 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
       await page.waitForTimeout(1000);
       await page.waitForSelector('input[name="username"]', { timeout: 10000 });
 
-      // 切换到账号密码登录
-      await switchToPasswordLogin(page);
-
+      // 知乎登录接口风控很强，自动提交账号密码容易触发“参数请求异常 10001”。
+      // 这里只预填账号，验证码、滑块、扫码、短信都交给用户在弹出的 Chrome 里完成。
       if (creds.username) {
-        await page.click('input[name="username"]');
-        await page.type('input[name="username"]', creds.username, { delay: 50 });
+        const userInput = await page.$('input[name="username"]');
+        if (userInput) {
+          await userInput.click({ clickCount: 3 });
+          await userInput.type(creds.username, { delay: 50 });
+        }
       }
-      if (creds.password) {
-        await page.click('input[name="password"], input[type="password"]');
-        await page.type('input[name="password"], input[type="password"]', creds.password, { delay: 50 });
-        await page.click('button[type="submit"]');
-        addLog('已提交登录信息，等待你完成滑块/短信验证...');
-      } else {
-        addLog('未填写密码，请在弹出的浏览器中手动完成知乎登录...');
-      }
+      addLog('请在弹出的 Chrome 里手动完成知乎登录/滑块/短信验证...');
 
       const loginOk = await waitForZhihuLogin(page, addLog, 120000);
       if (!loginOk) throw new Error('未检测到知乎登录成功，请确认滑块/短信验证完成后页面已跳转');

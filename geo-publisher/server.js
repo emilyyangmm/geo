@@ -24,7 +24,7 @@ app.use(express.json({ limit: '20mb' }));
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const COOKIES_DIR = path.join(__dirname, 'cookies');
-const MANUAL_LOGIN_PLATFORMS = new Set(['toutiao', 'baijiahao', 'sohu']);
+const MANUAL_LOGIN_PLATFORMS = new Set(['zhihu', 'toutiao', 'baijiahao', 'sohu']);
 
 // 确保目录存在
 if (!fs.existsSync(COOKIES_DIR)) fs.mkdirSync(COOKIES_DIR, { recursive: true });
