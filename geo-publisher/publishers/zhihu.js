@@ -3,7 +3,24 @@
  * 登录方式：账号密码 or Cookie缓存
  */
 
-const { launchBrowser, saveCookies, loadCookies, mdToHtml, waitForManualAction } = require('./base');
+const { launchBrowser, saveCookies, loadCookies } = require('./base');
+
+async function isZhihuLoggedIn(page) {
+  return page.evaluate(() =>
+    document.cookie.includes('z_c0') ||
+    !!document.querySelector('.AppHeader-userInfo, [data-za-detail-view-element_name="User"], [class*="Avatar"]')
+  );
+}
+
+async function waitForZhihuLogin(page, addLog, timeout = 120000) {
+  addLog(`请在弹出的知乎窗口完成滑块/短信验证（最多等待 ${timeout / 1000} 秒）...`);
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    if (await isZhihuLoggedIn(page)) return true;
+    await page.waitForTimeout(2000);
+  }
+  return false;
+}
 
 async function switchToPasswordLogin(page) {
   await page.waitForSelector('.SignFlow-tab', { timeout: 10000 });
@@ -49,13 +66,10 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
     }
 
     // 检查是否已登录
-    const isLoggedIn = await page.evaluate(() =>
-      !document.querySelector('.SignContainer-content') &&
-      (document.cookie.includes('z_c0') || !!document.querySelector('.AppHeader-userInfo'))
-    );
+    const isLoggedIn = await isZhihuLoggedIn(page);
 
     if (!isLoggedIn) {
-      addLog('未登录，正在填写账号密码...');
+      addLog('未登录，准备打开知乎登录页...');
       await page.goto('https://www.zhihu.com/signin', { waitUntil: 'networkidle2' });
       await page.waitForTimeout(1000);
       await page.waitForSelector('input[name="username"]', { timeout: 10000 });
@@ -63,14 +77,21 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
       // 切换到账号密码登录
       await switchToPasswordLogin(page);
 
-      await page.click('input[name="username"]');
-      await page.type('input[name="username"]', creds.username, { delay: 50 });
-      await page.click('input[name="password"], input[type="password"]');
-      await page.type('input[name="password"], input[type="password"]', creds.password, { delay: 50 });
-      await page.click('button[type="submit"]');
+      if (creds.username) {
+        await page.click('input[name="username"]');
+        await page.type('input[name="username"]', creds.username, { delay: 50 });
+      }
+      if (creds.password) {
+        await page.click('input[name="password"], input[type="password"]');
+        await page.type('input[name="password"], input[type="password"]', creds.password, { delay: 50 });
+        await page.click('button[type="submit"]');
+        addLog('已提交登录信息，等待你完成滑块/短信验证...');
+      } else {
+        addLog('未填写密码，请在弹出的浏览器中手动完成知乎登录...');
+      }
 
-      addLog('已提交登录，等待验证（如有验证码请手动处理）...');
-      await waitForManualAction(addLog, '请在浏览器中完成验证码/短信验证后等待跳转', 45000);
+      const loginOk = await waitForZhihuLogin(page, addLog, 120000);
+      if (!loginOk) throw new Error('未检测到知乎登录成功，请确认滑块/短信验证完成后页面已跳转');
       await saveCookies(page, cookiePath);
       addLog('登录成功，已保存 Cookie');
     } else {
