@@ -44,18 +44,9 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
       addLog('未登录，准备打开知乎登录页...');
       await page.goto('https://www.zhihu.com/signin', { waitUntil: 'networkidle2' });
       await page.waitForTimeout(1000);
-      await page.waitForSelector('input[name="username"]', { timeout: 10000 });
-
       // 知乎登录接口风控很强，自动提交账号密码容易触发“参数请求异常 10001”。
-      // 这里只预填账号，验证码、滑块、扫码、短信都交给用户在弹出的 Chrome 里完成。
-      if (creds.username) {
-        const userInput = await page.$('input[name="username"]');
-        if (userInput) {
-          await userInput.click({ clickCount: 3 });
-          await userInput.type(creds.username, { delay: 50 });
-        }
-      }
-      addLog('请在弹出的 Chrome 里手动完成知乎登录/滑块/短信验证...');
+      // 这里不预填、不点击提交，只等待用户在弹出的 Chrome 里完整手动登录。
+      addLog('请在弹出的 Chrome 里完整手动登录知乎；这个窗口会保存登录态，下次优先复用...');
 
       const loginOk = await waitForZhihuLogin(page, addLog, 120000);
       if (!loginOk) throw new Error('未检测到知乎登录成功，请确认滑块/短信验证完成后页面已跳转');

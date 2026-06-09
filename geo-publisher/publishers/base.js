@@ -4,6 +4,7 @@
 
 const puppeteer = require('puppeteer-core');
 const fs = require('fs');
+const path = require('path');
 const { marked } = require('marked');
 
 function findChromeExecutable() {
@@ -33,8 +34,11 @@ function findChromeExecutable() {
 // 启动浏览器（使用系统 Chrome，无需单独下载）
 async function launchBrowser() {
   const executablePath = findChromeExecutable();
+  const userDataDir = process.env.CHROME_USER_DATA_DIR || path.join(__dirname, '..', 'browser-profile');
+  if (!fs.existsSync(userDataDir)) fs.mkdirSync(userDataDir, { recursive: true });
   return puppeteer.launch({
     executablePath,
+    userDataDir,
     headless: false,
     defaultViewport: null,
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--start-maximized'],
