@@ -63,6 +63,83 @@ app.get('/api/status', (req, res) => {
   res.json({ ok: true, configured: [...configured] });
 });
 
+// ===================== 简易 Cookie 导入页面 =====================
+app.get('/', (req, res) => {
+  res.type('html').send(`<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GEO Publisher</title>
+  <style>
+    body { margin: 0; font-family: "Microsoft YaHei", Arial, sans-serif; background: #0b1020; color: #eef2ff; }
+    main { max-width: 860px; margin: 40px auto; padding: 0 20px; }
+    .card { background: #121a2f; border: 1px solid #24304d; border-radius: 10px; padding: 20px; }
+    h1 { margin: 0 0 8px; font-size: 24px; }
+    p { color: #9ca8c8; line-height: 1.7; }
+    label { display: block; margin: 14px 0 6px; color: #cbd5e1; font-size: 13px; }
+    select, textarea { width: 100%; box-sizing: border-box; border-radius: 8px; border: 1px solid #33415f; background: #0f172a; color: #eef2ff; padding: 10px 12px; font-size: 14px; }
+    textarea { min-height: 180px; resize: vertical; }
+    button { margin-top: 14px; border: 0; border-radius: 8px; background: #7cff4f; color: #06111f; font-weight: 700; padding: 11px 16px; cursor: pointer; }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .muted { font-size: 12px; color: #7d8bad; }
+    #result { margin-top: 14px; font-size: 14px; }
+    a { color: #8bd3ff; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="card">
+      <h1>GEO Publisher Cookie 导入</h1>
+      <p>把你已经登录平台后复制出来的 Cookie 粘到这里。支持 <code>name=value; name2=value2</code>，也支持 Cookie JSON 数组。</p>
+      <label>平台</label>
+      <select id="platform">
+        <option value="zhihu">知乎 zhihu</option>
+        <option value="toutiao">今日头条 toutiao</option>
+        <option value="baijiahao">百家号 baijiahao</option>
+        <option value="sohu">搜狐号 sohu</option>
+      </select>
+      <label>Cookie</label>
+      <textarea id="cookie" placeholder="在这里粘贴 Cookie"></textarea>
+      <div class="row">
+        <button onclick="importCookie()">保存 Cookie</button>
+        <span class="muted">Cookie 等于登录态，只保存在本机，不要发给别人。</span>
+      </div>
+      <div id="result"></div>
+      <p class="muted">主页面：<a href="https://geo.miaomiaoxiaoxianer.cn/geo-studio.html">geo-studio.html</a></p>
+    </div>
+  </main>
+  <script>
+    async function importCookie() {
+      const platform = document.getElementById('platform').value;
+      const cookie = document.getElementById('cookie').value;
+      const result = document.getElementById('result');
+      if (!cookie.trim()) {
+        result.textContent = '请先粘贴 Cookie';
+        result.style.color = '#ffb86b';
+        return;
+      }
+      try {
+        const res = await fetch('/api/cookies/' + platform + '/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cookie }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '导入失败');
+        result.textContent = '保存成功：' + platform + '，共 ' + data.count + ' 条 Cookie';
+        result.style.color = '#7cff4f';
+        document.getElementById('cookie').value = '';
+      } catch (e) {
+        result.textContent = '保存失败：' + e.message;
+        result.style.color = '#ff6b6b';
+      }
+    }
+  </script>
+</body>
+</html>`);
+});
+
 // ===================== 获取配置（脱敏） =====================
 app.get('/api/config', (req, res) => {
   const config = loadConfig();
