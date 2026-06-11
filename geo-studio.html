@@ -661,6 +661,7 @@
 
         <div style="display:flex;gap:10px;margin-top:16px">
           <button class="btn btn-primary" onclick="saveCredentials()">💾 保存账号配置</button>
+          <button class="btn btn-sm" onclick="importCookiePrompt()" style="color:var(--text2)">🍪 导入 Cookie</button>
           <button class="btn btn-sm" onclick="clearCookies()" style="color:var(--text3)">清除登录缓存</button>
         </div>
       </div>
@@ -1301,6 +1302,33 @@ async function saveCredentials() {
     }
   } catch (e) {
     alert('❌ 保存失败，请确认发布服务已启动：' + e.message);
+  }
+}
+
+async function importCookiePrompt() {
+  const platform = prompt('输入平台：zhihu / toutiao / baijiahao / sohu', 'zhihu');
+  if (!platform) return;
+  const normalized = platform.trim();
+  const allowed = ['zhihu', 'toutiao', 'baijiahao', 'sohu'];
+  if (!allowed.includes(normalized)) {
+    alert('暂只支持：' + allowed.join('、'));
+    return;
+  }
+  const cookie = prompt('粘贴 Cookie：支持 name=value; name2=value2，或 Cookie JSON 数组');
+  if (!cookie || !cookie.trim()) return;
+
+  try {
+    const res = await fetch(SERVER + '/api/cookies/' + normalized + '/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cookie }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '导入失败');
+    alert(`✅ ${normalized} Cookie 已导入，共 ${data.count} 条`);
+    await checkServer();
+  } catch (e) {
+    alert('❌ Cookie 导入失败：' + e.message);
   }
 }
 

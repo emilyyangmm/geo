@@ -25,6 +25,12 @@ app.use(express.json({ limit: '20mb' }));
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const COOKIES_DIR = path.join(__dirname, 'cookies');
 const MANUAL_LOGIN_PLATFORMS = new Set(['zhihu', 'toutiao', 'baijiahao', 'sohu']);
+const COOKIE_DOMAINS = {
+  zhihu: '.zhihu.com',
+  toutiao: '.toutiao.com',
+  baijiahao: '.baidu.com',
+  sohu: '.sohu.com',
+};
 
 // 确保目录存在
 if (!fs.existsSync(COOKIES_DIR)) fs.mkdirSync(COOKIES_DIR, { recursive: true });
@@ -48,10 +54,13 @@ function saveConfig(config) {
 // ===================== 健康检查 =====================
 app.get('/api/status', (req, res) => {
   const config = loadConfig();
-  const configured = Object.keys(config.platforms || {}).filter(
+  const configured = new Set(Object.keys(config.platforms || {}).filter(
     p => config.platforms[p]?.username || config.platforms[p]?.appId
-  );
-  res.json({ ok: true, configured });
+  ));
+  for (const platform of Object.keys(COOKIE_DOMAINS)) {
+    if (fs.existsSync(path.join(COOKIES_DIR, `${platform}.json`))) configured.add(platform);
+  }
+  res.json({ ok: true, configured: [...configured] });
 });
 
 // ===================== 获取配置（脱敏） =====================
@@ -92,6 +101,62 @@ app.delete('/api/cookies/:platform', (req, res) => {
   const cookiePath = path.join(COOKIES_DIR, `${req.params.platform}.json`);
   if (fs.existsSync(cookiePath)) fs.unlinkSync(cookiePath);
   res.json({ success: true });
+});
+
+function normalizeCookie(cookie, fallbackDomain) {
+  const name = String(cookie.name || '').trim();
+  const value = String(cookie.value || '');
+  if (!name) return null;
+  return {
+    name,
+    value,
+    domain: cookie.domain || fallbackDomain,
+    path: cookie.path || '/',
+    expires: typeof cookie.expires === 'number' ? cookie.expires : undefined,
+    httpOnly: Boolean(cookie.httpOnly),
+    secure: cookie.secure !== false,
+    sameSite: ['Strict', 'Lax', 'None'].includes(cookie.sameSite) ? cookie.sameSite : 'Lax',
+  };
+}
+
+function parseCookieInput(raw, fallbackDomain) {
+  const text = String(raw || '').trim();
+  if (!text) return [];
+
+  try {
+    const parsed = JSON.parse(text);
+    const list = Array.isArray(parsed) ? parsed : parsed.cookies;
+    if (Array.isArray(list)) {
+      return list.map(cookie => normalizeCookie(cookie, fallbackDomain)).filter(Boolean);
+    }
+  } catch {}
+
+  return text
+    .split(';')
+    .map(part => part.trim())
+    .filter(Boolean)
+    .map(part => {
+      const eq = part.indexOf('=');
+      if (eq <= 0) return null;
+      return normalizeCookie({
+        name: part.slice(0, eq).trim(),
+        value: part.slice(eq + 1).trim(),
+      }, fallbackDomain);
+    })
+    .filter(Boolean);
+}
+
+// ===================== 手动导入 Cookie =====================
+app.post('/api/cookies/:platform/import', (req, res) => {
+  const platform = req.params.platform;
+  const domain = COOKIE_DOMAINS[platform];
+  if (!domain) return res.status(400).json({ error: `不支持导入 Cookie 的平台: ${platform}` });
+
+  const cookies = parseCookieInput(req.body.cookie || req.body.cookies || '', domain);
+  if (!cookies.length) return res.status(400).json({ error: '没有识别到有效 Cookie' });
+
+  fs.writeFileSync(path.join(COOKIES_DIR, `${platform}.json`), JSON.stringify(cookies, null, 2));
+  res.json({ success: true, count: cookies.length });
 });
 
 // ===================== 单平台发布 =====================
