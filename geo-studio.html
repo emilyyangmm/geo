@@ -661,11 +661,11 @@
 
         <div style="display:flex;gap:10px;margin-top:16px">
           <button class="btn btn-primary" onclick="saveCredentials()">💾 保存账号配置</button>
-          <button class="btn btn-sm" onclick="toggleCookieImporter()" style="color:var(--text2)">🍪 导入 Cookie</button>
+          <button class="btn btn-sm" onclick="toggleCookieImporter()" style="color:var(--text2)">🍪 显示 Cookie 面板</button>
           <button class="btn btn-sm" onclick="clearCookies()" style="color:var(--text3)">清除登录缓存</button>
         </div>
 
-        <div id="cookieImporter" style="display:none;margin-top:14px;padding:14px;border:1px solid var(--border);border-radius:8px;background:var(--bg)">
+        <div id="cookieImporter" style="display:block;margin-top:14px;padding:14px;border:1px solid var(--border);border-radius:8px;background:var(--bg)">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
             <strong style="font-size:13px">手动导入 Cookie</strong>
             <span style="font-size:11px;color:var(--text3)">支持 name=value; name2=value2 或 Cookie JSON 数组</span>
