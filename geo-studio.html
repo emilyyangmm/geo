@@ -661,8 +661,35 @@
 
         <div style="display:flex;gap:10px;margin-top:16px">
           <button class="btn btn-primary" onclick="saveCredentials()">💾 保存账号配置</button>
-          <button class="btn btn-sm" onclick="importCookiePrompt()" style="color:var(--text2)">🍪 导入 Cookie</button>
+          <button class="btn btn-sm" onclick="toggleCookieImporter()" style="color:var(--text2)">🍪 导入 Cookie</button>
           <button class="btn btn-sm" onclick="clearCookies()" style="color:var(--text3)">清除登录缓存</button>
+        </div>
+
+        <div id="cookieImporter" style="display:none;margin-top:14px;padding:14px;border:1px solid var(--border);border-radius:8px;background:var(--bg)">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+            <strong style="font-size:13px">手动导入 Cookie</strong>
+            <span style="font-size:11px;color:var(--text3)">支持 name=value; name2=value2 或 Cookie JSON 数组</span>
+          </div>
+          <div class="form-grid" style="margin-bottom:10px">
+            <div class="field">
+              <label>平台</label>
+              <select id="cookiePlatform" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg2);color:var(--text)">
+                <option value="zhihu">知乎 zhihu</option>
+                <option value="toutiao">今日头条 toutiao</option>
+                <option value="baijiahao">百家号 baijiahao</option>
+                <option value="sohu">搜狐号 sohu</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Cookie</label>
+              <textarea id="cookieText" placeholder="粘贴从浏览器复制出来的 Cookie" style="min-height:90px"></textarea>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <button class="btn btn-primary btn-sm" onclick="importCookieFromPanel()">保存 Cookie</button>
+            <button class="btn btn-sm" onclick="document.getElementById('cookieImporter').style.display='none'">取消</button>
+            <span style="font-size:11px;color:var(--text3)">Cookie 等于登录态，只保存在本机，不要发给别人。</span>
+          </div>
         </div>
       </div>
 
@@ -1305,17 +1332,18 @@ async function saveCredentials() {
   }
 }
 
-async function importCookiePrompt() {
-  const platform = prompt('输入平台：zhihu / toutiao / baijiahao / sohu', 'zhihu');
-  if (!platform) return;
-  const normalized = platform.trim();
-  const allowed = ['zhihu', 'toutiao', 'baijiahao', 'sohu'];
-  if (!allowed.includes(normalized)) {
-    alert('暂只支持：' + allowed.join('、'));
+function toggleCookieImporter() {
+  const el = document.getElementById('cookieImporter');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function importCookieFromPanel() {
+  const normalized = document.getElementById('cookiePlatform').value;
+  const cookie = document.getElementById('cookieText').value;
+  if (!cookie || !cookie.trim()) {
+    alert('请先粘贴 Cookie');
     return;
   }
-  const cookie = prompt('粘贴 Cookie：支持 name=value; name2=value2，或 Cookie JSON 数组');
-  if (!cookie || !cookie.trim()) return;
 
   try {
     const res = await fetch(SERVER + '/api/cookies/' + normalized + '/import', {
@@ -1326,6 +1354,8 @@ async function importCookiePrompt() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || '导入失败');
     alert(`✅ ${normalized} Cookie 已导入，共 ${data.count} 条`);
+    document.getElementById('cookieText').value = '';
+    document.getElementById('cookieImporter').style.display = 'none';
     await checkServer();
   } catch (e) {
     alert('❌ Cookie 导入失败：' + e.message);
