@@ -24,6 +24,7 @@ app.use(express.json({ limit: '20mb' }));
 
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const COOKIES_DIR = path.join(__dirname, 'cookies');
+const SITE_ROOT = path.resolve(__dirname, '..');
 const MANUAL_LOGIN_PLATFORMS = new Set(['zhihu', 'toutiao', 'baijiahao', 'sohu']);
 const COOKIE_DOMAINS = {
   zhihu: '.zhihu.com',
@@ -139,6 +140,13 @@ app.get('/', (req, res) => {
 </body>
 </html>`);
 });
+
+// ===================== 本地 GEO Studio 页面 =====================
+app.get('/geo-studio.html', (req, res) => {
+  res.sendFile(path.join(SITE_ROOT, 'geo-studio.html'));
+});
+app.use('/pdd商品图', express.static(path.join(SITE_ROOT, 'pdd商品图')));
+app.use('/assets', express.static(path.join(SITE_ROOT, 'assets')));
 
 // ===================== 获取配置（脱敏） =====================
 app.get('/api/config', (req, res) => {
