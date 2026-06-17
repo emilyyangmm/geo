@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 百度百家号发布模块
  * 登录地址: https://baijiahao.baidu.com
  */
@@ -9,6 +9,13 @@ const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
 
+const BAIJIAHAO_COVER_UPLOAD_PATH = path.resolve(
+  __dirname,
+  '..',
+  '..',
+  '\u0070\u0064\u0064\u5546\u54c1\u56fe',
+  '\u0030\u0030\u005f\u5546\u54c1\u5c01\u9762\u005f\u0039\u0030\u0030\u0078\u0039\u0030\u0030\u002e\u006a\u0070\u0067',
+);
 const BAIJIAHAO_COVER_PATH = path.resolve(__dirname, '..', '..', 'pdd商品图', '00_商品封面_900x900.jpg');
 
 async function waitForAnySelector(page, selectors, timeout = 20000) {
@@ -470,7 +477,8 @@ async function clickBaijiahaoCoverTile(page) {
 }
 
 async function uploadBaijiahaoCover(page, addLog) {
-  if (!fs.existsSync(BAIJIAHAO_COVER_PATH)) {
+  const coverPath = fs.existsSync(BAIJIAHAO_COVER_UPLOAD_PATH) ? BAIJIAHAO_COVER_UPLOAD_PATH : BAIJIAHAO_COVER_PATH;
+  if (!fs.existsSync(coverPath)) {
     addLog('未找到百家号封面图文件，跳过封面上传');
     return false;
   }
@@ -480,7 +488,7 @@ async function uploadBaijiahaoCover(page, addLog) {
   const clicked = await clickByText(page, ['选择封面', '设置封面', '上传封面']);
   const chooser = clicked ? await chooserPromise : null;
   if (chooser) {
-    await chooser.accept([BAIJIAHAO_COVER_PATH]);
+    await chooser.accept([coverPath]);
     await page.waitForTimeout(2000);
     const confirm = await clickByText(page, ['确定', '完成', '使用', '保存']);
     if (confirm) {
@@ -493,9 +501,11 @@ async function uploadBaijiahaoCover(page, addLog) {
   }
   const fileInput = await waitForAnySelector(page, ['input[type="file"][accept*="image"]', 'input[type="file"]'], 3000);
   if (fileInput) {
-    await fileInput.handle.uploadFile(BAIJIAHAO_COVER_PATH);
+    await fileInput.handle.uploadFile(coverPath);
     addLog('已通过文件输入框上传百家号封面');
     await page.waitForTimeout(2000);
+    const confirm = await clickByText(page, ['确定', '完成', '使用', '保存']);
+    if (confirm) addLog(`已确认百家号封面：${confirm}`);
     return true;
   }
   addLog('未找到百家号封面上传控件，请手动选择封面');
@@ -1178,8 +1188,18 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
     const shotPath = path.join(shotDir, `filled-${Date.now()}.png`);
     await page.screenshot({ path: shotPath, fullPage: false }).catch(() => null);
     addLog(`百家号填写后截图：${shotPath}`);
+    await dismissBaijiahaoGuides(page, addLog);
+    const coverOk = await uploadBaijiahaoCover(page, addLog);
+    if (coverOk) {
+      addLog('百家号封面已处理，最终发布前请肉眼确认封面是否匹配文章');
+    } else {
+      addLog('百家号封面未自动完成，请在弹出的浏览器里手动选择封面');
+    }
+    const coverShotPath = path.join(shotDir, `cover-${Date.now()}.png`);
+    await page.screenshot({ path: coverShotPath, fullPage: false }).catch(() => null);
+    addLog(`百家号封面处理后截图：${coverShotPath}`);
     await saveCookies(page, cookiePath);
-    addLog('百家号已填写标题和正文；封面与最终发布先手动确认，窗口会保留 5 分钟');
+    addLog('百家号已填写标题、正文并尝试处理封面；最终发布先手动确认，窗口会保留 5 分钟');
     await waitForManualAction(addLog, '等待手动确认百家号编辑结果', 300000);
     return { url: page.url(), manual: true };
 
