@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 微信公众号发布模块（官方 API）
  * 需要: AppID + AppSecret（服务号或订阅号）
  * 文档: https://developers.weixin.qq.com/doc/offiaccount/Message_Management/
@@ -8,6 +8,9 @@
 
 const axios = require('axios');
 const { marked } = require('marked');
+const FormData = require('form-data');
+const fs = require('fs');
+const path = require('path');
 
 // 获取 access_token（缓存避免频繁请求）
 let tokenCache = {};
@@ -24,6 +27,25 @@ async function getAccessToken(appId, appSecret) {
   return tokenCache[appId].token;
 }
 
+async function uploadDefaultThumb(token, title) {
+  const form = new FormData();
+  const coverPath = path.resolve(__dirname, '..', '..', 'pdd商品图', '00_商品封面_900x900.jpg');
+  if (!fs.existsSync(coverPath)) throw new Error(`找不到公众号封面图: ${coverPath}`);
+  form.append('media', fs.createReadStream(coverPath), {
+    filename: 'cover.jpg',
+    contentType: 'image/jpeg',
+  });
+  const res = await axios.post(
+    `https://api.weixin.qq.com/cgi-bin/material/add_material?access_token=${token}&type=thumb`,
+    form,
+    { headers: form.getHeaders() }
+  );
+  if (res.data.errcode && res.data.errcode !== 0) {
+    throw new Error(`封面上传失败: ${res.data.errmsg} (code: ${res.data.errcode})`);
+  }
+  return res.data.media_id;
+}
+
 async function publish({ title, content, summary, tags, creds, cookiePath, addLog }) {
   const { appId, appSecret, author = '' } = creds;
   if (!appId || !appSecret) throw new Error('微信公众号需要填写 AppID 和 AppSecret');
@@ -33,6 +55,9 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
 
   // Markdown → HTML
   const htmlContent = marked.parse(content || '');
+
+  addLog('上传默认封面...');
+  const thumbMediaId = await uploadDefaultThumb(token, title);
 
   addLog('上传图文草稿...');
   const draftRes = await axios.post(
@@ -44,7 +69,7 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
         digest: (summary || '').slice(0, 120),
         content: htmlContent,
         content_source_url: '',
-        thumb_media_id: '', // 封面图 media_id，留空则使用默认
+        thumb_media_id: thumbMediaId,
         need_open_comment: 1,
         only_fans_can_comment: 0,
       }],

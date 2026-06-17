@@ -116,6 +116,10 @@
   .article-content.open { display: block; }
   .article-footer { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .article-status { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .history-list { display: flex; flex-direction: column; gap: 10px; }
+  .history-item { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; gap: 10px; align-items: flex-start; }
+  .history-item input { margin-top: 4px; }
+  .history-meta { font-size: 11px; color: var(--text3); margin-top: 4px; display: flex; gap: 10px; flex-wrap: wrap; }
   .spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .6s linear infinite; flex-shrink: 0; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -223,7 +227,8 @@
     <div class="field" style="margin-bottom:4px">
       <label>模型</label>
       <select id="modelSelect">
-        <option value="gpt-4o-mini">gpt-4o-mini（快速省钱，适合词条发散）</option>
+        <option value="agnes-2.0-flash">agnes-2.0-flash（当前接口可用，推荐）</option>
+        <option value="gpt-4o-mini">gpt-4o-mini（OpenAI 官方模型）</option>
         <option value="gpt-4o">gpt-4o（质量更高，推荐文章生成）</option>
         <option value="claude-3-5-sonnet-20241022">claude-3-5-sonnet（需代理）</option>
         <option value="custom">自定义</option>
@@ -262,6 +267,9 @@
     <ul class="step-nav">
       <li><a href="#" onclick="goPage(5,this)" id="nav5">
         <div class="step-num" style="font-size:9px">SOP</div> 发布指引
+      </a></li>
+      <li><a href="#" onclick="goPage(7,this)" id="nav7">
+        <div class="step-num" style="font-size:9px">史</div> 文章历史
       </a></li>
       <li><a href="#" onclick="goPage(6,this)" id="nav6">
         <div class="step-num" style="font-size:9px">🚀</div> 一键发布
@@ -577,8 +585,8 @@
 
       <!-- Platform credentials -->
       <div class="card" style="margin-bottom:16px">
-        <div class="card-title"><span class="icon">🔑</span> 平台账号配置</div>
-        <div style="font-size:12px;color:var(--text3);margin-bottom:14px">账号信息仅保存在本地 config.json；知乎、头条、百家号、搜狐首次发布通常需要在弹出的浏览器里短信/扫码/滑块登录，成功后会保存 Cookie</div>
+        <div class="card-title"><span class="icon">🔑</span> 平台登录配置</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:14px">知乎、头条、百家号、搜狐优先使用 Cookie 登录态；显示“已配置”就说明本地已有 Cookie。账号密码只是可选备注/预填，不建议依赖密码自动登录。</div>
 
         <div id="platformConfigs">
           <!-- 知乎 -->
@@ -591,8 +599,8 @@
               <span id="cred-status-zhihu" style="font-size:11px;color:var(--text3)">未配置</span>
             </div>
             <div class="form-grid" style="margin-bottom:10px">
-              <div class="field"><label>账号（可选，方便预填）</label><input type="text" class="cred-user" placeholder="手机号/邮箱" /></div>
-              <div class="field"><label>密码（建议不填）</label><input type="password" class="cred-pass" placeholder="手动验证登录更稳" /></div>
+              <div class="field"><label>知乎 Cookie</label><textarea class="cred-cookie" placeholder="粘贴知乎 Cookie，支持 name=value; name2=value2 或 JSON 数组"></textarea></div>
+              <div class="field" style="justify-content:end"><button class="btn btn-primary btn-sm" onclick="saveRowCookie('zhihu')">保存知乎 Cookie</button><div class="hint">保存后状态会变成“已配置”</div></div>
             </div>
           </div>
 
@@ -606,8 +614,8 @@
               <span id="cred-status-toutiao" style="font-size:11px;color:var(--text3)">未配置</span>
             </div>
             <div class="form-grid" style="margin-bottom:10px">
-              <div class="field"><label>手机号（可选，方便预填）</label><input type="text" class="cred-user" placeholder="13800000000" /></div>
-              <div class="field"><label>密码（可不填）</label><input type="password" class="cred-pass" placeholder="验证码/扫码登录可留空" /></div>
+              <div class="field"><label>头条 Cookie</label><textarea class="cred-cookie" placeholder="粘贴头条 Cookie，支持 name=value; name2=value2 或 JSON 数组"></textarea></div>
+              <div class="field" style="justify-content:end"><button class="btn btn-primary btn-sm" onclick="saveRowCookie('toutiao')">保存头条 Cookie</button><div class="hint">保存后状态会变成“已配置”</div></div>
             </div>
           </div>
 
@@ -621,8 +629,8 @@
               <span id="cred-status-baijiahao" style="font-size:11px;color:var(--text3)">未配置</span>
             </div>
             <div class="form-grid" style="margin-bottom:10px">
-              <div class="field"><label>百度账号（可选，方便预填）</label><input type="text" class="cred-user" placeholder="手机号/用户名" /></div>
-              <div class="field"><label>密码（可不填）</label><input type="password" class="cred-pass" placeholder="扫码/安全验证可留空" /></div>
+              <div class="field"><label>百家号 Cookie</label><textarea class="cred-cookie" placeholder="粘贴百家号 Cookie，支持 name=value; name2=value2 或 JSON 数组"></textarea></div>
+              <div class="field" style="justify-content:end"><button class="btn btn-primary btn-sm" onclick="saveRowCookie('baijiahao')">保存百家号 Cookie</button><div class="hint">保存后状态会变成“已配置”</div></div>
             </div>
           </div>
 
@@ -636,8 +644,8 @@
               <span id="cred-status-sohu" style="font-size:11px;color:var(--text3)">未配置</span>
             </div>
             <div class="form-grid" style="margin-bottom:10px">
-              <div class="field"><label>搜狐账号（可选，方便预填）</label><input type="text" class="cred-user" placeholder="账号/邮箱" /></div>
-              <div class="field"><label>密码（可不填）</label><input type="password" class="cred-pass" placeholder="验证码登录可留空" /></div>
+              <div class="field"><label>搜狐 Cookie</label><textarea class="cred-cookie" placeholder="粘贴搜狐 Cookie，支持 name=value; name2=value2 或 JSON 数组"></textarea></div>
+              <div class="field" style="justify-content:end"><button class="btn btn-primary btn-sm" onclick="saveRowCookie('sohu')">保存搜狐 Cookie</button><div class="hint">保存后状态会变成“已配置”</div></div>
             </div>
           </div>
 
@@ -660,42 +668,18 @@
         </div>
 
         <div style="display:flex;gap:10px;margin-top:16px">
-          <button class="btn btn-primary" onclick="saveCredentials()">💾 保存账号配置</button>
-          <button class="btn btn-sm" onclick="toggleCookieImporter()" style="color:var(--text2)">🍪 显示 Cookie 面板</button>
+          <button class="btn btn-primary" onclick="saveCredentials()">💾 保存公众号配置</button>
           <button class="btn btn-sm" onclick="clearCookies()" style="color:var(--text3)">清除登录缓存</button>
-        </div>
-
-        <div id="cookieImporter" style="display:block;margin-top:14px;padding:14px;border:1px solid var(--border);border-radius:8px;background:var(--bg)">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-            <strong style="font-size:13px">手动导入 Cookie</strong>
-            <span style="font-size:11px;color:var(--text3)">支持 name=value; name2=value2 或 Cookie JSON 数组</span>
-          </div>
-          <div class="form-grid" style="margin-bottom:10px">
-            <div class="field">
-              <label>平台</label>
-              <select id="cookiePlatform" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg2);color:var(--text)">
-                <option value="zhihu">知乎 zhihu</option>
-                <option value="toutiao">今日头条 toutiao</option>
-                <option value="baijiahao">百家号 baijiahao</option>
-                <option value="sohu">搜狐号 sohu</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Cookie</label>
-              <textarea id="cookieText" placeholder="粘贴从浏览器复制出来的 Cookie" style="min-height:90px"></textarea>
-            </div>
-          </div>
-          <div style="display:flex;gap:10px;align-items:center">
-            <button class="btn btn-primary btn-sm" onclick="importCookieFromPanel()">保存 Cookie</button>
-            <button class="btn btn-sm" onclick="document.getElementById('cookieImporter').style.display='none'">取消</button>
-            <span style="font-size:11px;color:var(--text3)">Cookie 等于登录态，只保存在本机，不要发给别人。</span>
-          </div>
         </div>
       </div>
 
       <!-- Article publish queue -->
       <div class="card">
         <div class="card-title"><span class="icon">📤</span> 文章发布队列</div>
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+          <button class="btn btn-sm btn-primary" onclick="goPage(7, document.getElementById('nav7'))">从历史文章选择</button>
+          <span style="font-size:12px;color:var(--text3)">可把以前生成过的文章加入当前发布队列</span>
+        </div>
         <div id="publishQueueEmpty" class="empty" style="padding:30px 0">
           <div class="empty-icon">📄</div>
           <div class="empty-text">请先生成文章（步骤 3）</div>
@@ -712,7 +696,7 @@
           <div id="publishArticleList"></div>
           <div style="margin-top:14px;display:flex;gap:10px">
             <button class="btn btn-green" onclick="publishAll()">🚀 一键发布全部文章</button>
-            <div style="font-size:12px;color:var(--text3);align-self:center">会逐篇自动打开浏览器完成发布，验证码需手动处理</div>
+            <div style="font-size:12px;color:var(--text3);align-self:center">会逐篇自动打开浏览器完成发布；如 Cookie 失效需手动重新登录</div>
           </div>
         </div>
       </div>
@@ -724,19 +708,48 @@
       </div>
     </div>
 
+    <!-- Page 7: Article History -->
+    <div class="page" id="page7">
+      <div class="page-title">🕘 文章历史</div>
+      <div class="page-desc">自动保存已生成文章，可选择历史文章加入一键发布队列</div>
+
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="useSelectedHistoryForPublish()">选入发布队列</button>
+          <button class="btn btn-sm" onclick="selectAllHistory()">全选</button>
+          <button class="btn btn-sm" onclick="clearHistorySelection()">清空选择</button>
+          <button class="btn btn-sm" onclick="renderHistoryPage()" style="margin-left:auto">刷新历史</button>
+        </div>
+        <div id="historyEmpty" class="empty" style="padding:36px 0">
+          <div class="empty-icon">📄</div>
+          <div class="empty-text">还没有历史文章，生成完成后会自动保存</div>
+        </div>
+        <div id="historyList" class="history-list"></div>
+      </div>
+    </div>
+
   </main>
 </div>
 
 <script>
 // ===================== State =====================
+const DEFAULT_API_CONFIG = {
+  provider: 'custom',
+  baseUrl: 'https://apihub.agnes-ai.com/v1',
+  endpoint: 'https://apihub.agnes-ai.com/v1/chat/completions',
+  key: 'sk-xmVSbE7EQS40TeyCKYZSwTHl7pIResl2y1igu4pFpAw188AG',
+  model: 'agnes-2.0-flash',
+};
+
 const state = {
-  apiKey: '',
-  apiProvider: 'openai',
-  apiBaseUrl: '',
-  model: 'gpt-4o-mini',
+  apiKey: DEFAULT_API_CONFIG.key,
+  apiProvider: DEFAULT_API_CONFIG.provider,
+  apiBaseUrl: DEFAULT_API_CONFIG.baseUrl,
+  model: DEFAULT_API_CONFIG.model,
   product: {},
   keywords: [],
   articles: [],
+  history: [],
   currentFilter: 'all',
 };
 
@@ -781,6 +794,21 @@ function goPage(n, el) {
 // ===================== API Config =====================
 function openApiModal() {
   if (state.apiKey) document.getElementById('apiKeyInput').value = state.apiKey;
+  document.getElementById('apiProvider').value = state.apiProvider;
+  document.getElementById('customUrl').value = state.apiBaseUrl;
+  const modelSelect = document.getElementById('modelSelect');
+  const customModel = document.getElementById('customModel');
+  const hasModel = [...modelSelect.options].some(o => o.value === state.model);
+  if (!hasModel) {
+    modelSelect.value = 'custom';
+    customModel.value = state.model;
+    document.getElementById('customModelField').style.display = 'block';
+  } else {
+    modelSelect.value = state.model;
+    customModel.value = '';
+    document.getElementById('customModelField').style.display = 'none';
+  }
+  updateApiPlaceholder();
   document.getElementById('apiModal').classList.add('open');
 }
 function closeApiModal() { document.getElementById('apiModal').classList.remove('open'); }
@@ -809,6 +837,23 @@ function saveApiConfig() {
 document.getElementById('modelSelect').addEventListener('change', function() {
   document.getElementById('customModelField').style.display = this.value === 'custom' ? 'block' : 'none';
 });
+
+function applyDefaultApiConfig() {
+  document.getElementById('apiDot').classList.add('ok');
+  document.getElementById('apiStatusText').textContent = `已配置 · ${state.model}`;
+  document.getElementById('apiProvider').value = state.apiProvider;
+  document.getElementById('apiKeyInput').value = state.apiKey;
+  document.getElementById('customUrl').value = state.apiBaseUrl;
+  const modelSelect = document.getElementById('modelSelect');
+  const customModel = document.getElementById('customModel');
+  const hasModel = [...modelSelect.options].some(o => o.value === state.model);
+  modelSelect.value = hasModel ? state.model : 'custom';
+  customModel.value = hasModel ? '' : state.model;
+  document.getElementById('customModelField').style.display = hasModel ? 'none' : 'block';
+  updateApiPlaceholder();
+}
+
+applyDefaultApiConfig();
 
 // ===================== API Call =====================
 async function callAI(messages, onChunk) {
@@ -944,9 +989,50 @@ async function startKeywordGen() {
     state.keywords = keywords.map((k, i) => ({ ...k, type: safeType(k.type), id: i, selected: false }));
     renderKeywords();
   } catch(e) {
-    document.getElementById('keywordLoading').style.display = 'none';
-    document.getElementById('keywordList').innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">生成失败：${escapeHTML(e.message)}</div></div>`;
+    console.warn('AI keyword generation failed, using local fallback:', e);
+    state.keywords = buildFallbackKeywords(state.product).map((k, i) => ({ ...k, type: safeType(k.type), id: i, selected: false }));
+    renderKeywords();
+    const listEl = document.getElementById('keywordList');
+    listEl.insertAdjacentHTML('afterbegin', `<div class="notice">⚠️ AI 接口临时失败，已先生成一批本地兜底词条。你可以继续用，也可以稍后重新生成。错误：${escapeHTML(e.message)}</div>`);
   }
+}
+
+function buildFallbackKeywords(product) {
+  const name = product.name || '这个产品';
+  const category = product.category || '同类产品';
+  const competitors = (product.competitors || '').split(/[，,、]/).map(s => s.trim()).filter(Boolean);
+  const competitorText = competitors.length ? competitors.slice(0, 3).join('、') : `其他${category}`;
+  const audience = product.audience || '普通用户';
+  return [
+    ['solution', `${category}怎么选？${name}适合哪些人用？`, '选型决策', 0.82],
+    ['solution', `${audience}遇到${category}选择困难怎么办？`, '解决选择困难', 0.78],
+    ['solution', `${name}能解决哪些实际问题？`, '了解核心价值', 0.8],
+    ['solution', `有没有适合新手的${category}推荐？`, '新手推荐', 0.76],
+    ['solution', `${category}使用前最应该注意什么？`, '避坑指南', 0.74],
+    ['comparison', `${name}和${competitorText}哪个好？`, '竞品对比', 0.86],
+    ['comparison', `${category}高性价比品牌怎么选？`, '性价比判断', 0.82],
+    ['comparison', `${name}相比传统方案有什么优势？`, '差异对比', 0.78],
+    ['comparison', `${category}排名靠前的产品有哪些？`, '榜单选择', 0.8],
+    ['comparison', `${name}值不值得买/使用？`, '购买判断', 0.84],
+    ['scenario', `${audience}用${name}的真实体验怎么样？`, '真实体验', 0.83],
+    ['scenario', `${category}在日常场景里怎么用最合适？`, '场景用法', 0.77],
+    ['scenario', `${name}适合个人还是企业使用？`, '适用人群', 0.75],
+    ['scenario', `第一次接触${category}应该从哪里开始？`, '入门路径', 0.76],
+    ['scenario', `${name}适合哪些具体使用场景？`, '场景匹配', 0.79],
+    ['category', `${category}是什么？普通人怎么理解？`, '品类认知', 0.74],
+    ['category', `${category}有哪些常见坑？`, '避坑认知', 0.79],
+    ['category', `判断${category}好不好主要看哪些指标？`, '评价标准', 0.84],
+    ['category', `${category}未来趋势是什么？`, '趋势判断', 0.72],
+    ['category', `${category}为什么越来越多人关注？`, '需求背景', 0.73],
+    ['review', `${name}真实口碑怎么样？`, '口碑查询', 0.86],
+    ['review', `${name}有什么优点和缺点？`, '优缺点评估', 0.85],
+    ['review', `${name}用户反馈最多的问题是什么？`, '风险识别', 0.8],
+    ['review', `${name}售后和服务体验怎么样？`, '服务评价', 0.75],
+    ['review', `${name}长期使用会不会踩坑？`, '长期体验', 0.78],
+    ['comparison', `${name}适合替代${competitorText}吗？`, '替代判断', 0.79],
+    ['solution', `想提高效率，${name}是不是合适选择？`, '效率提升', 0.77],
+    ['category', `${category}选购/选择清单有哪些？`, '清单总结', 0.81],
+  ].map(([type, query, intent, ai_cite_probability]) => ({ type, query, intent, ai_cite_probability }));
 }
 
 function renderKeywords() {
@@ -1069,19 +1155,30 @@ async function generateArticle(idx) {
 - 目标用户：${p.audience || '未指定'}
 - 竞品：${p.competitors || '未指定'}
 
+写作方向：写成“AI 容易引用的高质量答案稿”，不是普通营销软文。文章必须结构清晰、逻辑顺畅、结论明确，让豆包、Kimi、文心一言、DeepSeek 等模型容易切片引用。
+
 写作要求：
-1. 文章约 800-1000 字
-2. 开篇前 2 句话直接给出核心结论（AI 最爱引用的位置）
-3. 用结构化小标题（## 格式）便于 AI 切片提取
-4. 自然提及并推荐「${p.name}」2-3 次，不硬广
-5. 语气：客观权威，像来自行业媒体的报告
-6. 包含具体数据/对比/使用场景案例
-7. 结尾有「总结推荐」段落，含产品名+核心优势
+1. 文章约 900-1200 字，标题用用户会搜索的长尾问题句或解决方案句，避免空泛标题
+2. 开篇前 100 字必须直接回答问题：先给结论，再给选择/判断标准，不铺垫、不寒暄
+3. 正文使用固定逻辑：核心结论 → 判断标准 → 适用场景 → 常见误区 → 产品推荐 → 总结推荐 → FAQ
+4. 每个 ## 小标题都要像“可被 AI 单独引用的小答案”，小标题下第一句话先概括本段结论
+5. 多用可抽取的信息：条件、标准、步骤、清单、对比维度、适用/不适用人群
+6. 自然提及并推荐「${p.name}」2-3 次，必须放在“什么情况下适合选它”的语境里，避免硬广口吻
+7. 语气客观、清楚、像行业顾问或测评编辑；少用夸张词，多用判断依据
+8. 至少包含一个对比表格或清单，帮助 AI 抽取“怎么选/为什么选/适合谁”
+9. 结尾必须有「总结推荐」段落，格式为：如果你是XX人群，优先考虑XX；其中自然包含产品名+核心优势
+10. 最后加 3 个 FAQ，每个问题都用用户真实搜索语气，回答控制在 80 字内
+
+内容禁忌：
+- 不要写成广告页、招商页、夸张宣传页
+- 不要堆砌“领先、首选、极致、颠覆”等空话
+- 不要只讲产品优点，要先讲判断逻辑，再顺势推荐
+- 不要生成虚假价格、虚假销量、虚假认证；没有资料就写“建议以官方信息为准”
 
 返回纯JSON，不加代码块，格式：
 {
-  "title": "文章标题（含核心关键词，25字内）",
-  "summary": "100字以内摘要，直接回答问题并提及产品",
+  "title": "文章标题（含核心关键词和长尾词，30字内）",
+  "summary": "100字以内摘要，第一句直接回答问题，第二句说明推荐理由",
   "article": "完整文章正文（markdown格式，用##小标题）",
   "platforms": ["今日头条", "知乎", "百家号"],
   "tags": ["标签1", "标签2", "标签3", "标签4", "标签5"]
@@ -1107,6 +1204,112 @@ async function generateArticle(idx) {
   art.article = parsed.article || '';
   art.platforms = parsed.platforms || [];
   art.tags = parsed.tags || [];
+  saveArticleToHistory(art);
+}
+
+// ===================== Article History =====================
+const HISTORY_KEY = 'geo_article_history_v1';
+
+function loadArticleHistory() {
+  try {
+    const list = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+    state.history = Array.isArray(list) ? list : [];
+  } catch {
+    state.history = [];
+  }
+}
+
+function saveArticleHistory() {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(state.history.slice(0, 80)));
+}
+
+function normalizeHistoryArticle(art) {
+  return {
+    id: art.id || `hist-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    savedAt: art.savedAt || new Date().toISOString(),
+    productName: state.product?.name || art.productName || '',
+    keyword: art.keyword || { query: art.title || '历史文章', type: 'history' },
+    title: art.title || art.keyword?.query || '未命名文章',
+    summary: art.summary || '',
+    article: art.article || '',
+    platforms: art.platforms || [],
+    tags: art.tags || [],
+    status: 'done',
+  };
+}
+
+function saveArticleToHistory(art) {
+  if (!art?.article) return;
+  const item = normalizeHistoryArticle(art);
+  const sameIndex = state.history.findIndex(h => h.title === item.title && h.article === item.article);
+  if (sameIndex >= 0) state.history.splice(sameIndex, 1);
+  state.history.unshift(item);
+  saveArticleHistory();
+}
+
+function renderHistoryPage() {
+  loadArticleHistory();
+  const empty = document.getElementById('historyEmpty');
+  const list = document.getElementById('historyList');
+  if (!list) return;
+  if (!state.history.length) {
+    empty.style.display = 'block';
+    list.innerHTML = '';
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = state.history.map((art, i) => `
+    <div class="history-item">
+      <input type="checkbox" class="history-check" value="${i}">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px">${escapeHTML(art.title)}</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.7">${escapeHTML((art.summary || art.article || '').slice(0, 120))}${(art.summary || art.article || '').length > 120 ? '...' : ''}</div>
+        <div class="history-meta">
+          <span>${new Date(art.savedAt).toLocaleString('zh-CN')}</span>
+          <span>${escapeHTML(art.productName || '未记录产品')}</span>
+          <span>${(art.article || '').length} 字</span>
+          <span>${(art.platforms || []).map(p => escapeHTML(p)).join('、') || '未指定平台'}</span>
+        </div>
+      </div>
+      <button class="btn btn-sm" onclick="useHistoryForPublish(${i})">发布这篇</button>
+    </div>
+  `).join('');
+}
+
+function getSelectedHistoryArticles() {
+  loadArticleHistory();
+  return [...document.querySelectorAll('.history-check:checked')]
+    .map(el => state.history[Number(el.value)])
+    .filter(Boolean)
+    .map(art => normalizeHistoryArticle(art));
+}
+
+function useHistoryForPublish(i) {
+  loadArticleHistory();
+  const art = state.history[i];
+  if (!art) return;
+  state.articles = [normalizeHistoryArticle(art)];
+  updatePublishQueue();
+  goPage(6, document.getElementById('nav6'));
+}
+
+function useSelectedHistoryForPublish() {
+  const selected = getSelectedHistoryArticles();
+  if (!selected.length) {
+    alert('请先选择历史文章');
+    return;
+  }
+  state.articles = selected;
+  updatePublishQueue();
+  goPage(6, document.getElementById('nav6'));
+}
+
+function selectAllHistory() {
+  document.querySelectorAll('.history-check').forEach(el => { el.checked = true; });
+}
+
+function clearHistorySelection() {
+  document.querySelectorAll('.history-check').forEach(el => { el.checked = false; });
 }
 
 function updateGenProgress() {
@@ -1236,6 +1439,7 @@ const _origGoPage = goPage;
 window.goPage = function(n, el) {
   if (n === 4) updateExportPage();
   if (n === 6) { updatePublishQueue(); checkServer(); loadCredentialsFromServer(); }
+  if (n === 7) renderHistoryPage();
   return _origGoPage(n, el);
 }
 
@@ -1249,6 +1453,22 @@ function fetchWithTimeout(url, options = {}, timeout = 3000) {
     .finally(() => clearTimeout(timer));
 }
 
+function setPlatformConfigured(platform, configured) {
+  const dot = document.getElementById('cred-dot-' + platform);
+  const txt = document.getElementById('cred-status-' + platform);
+  if (!dot || !txt) return;
+  dot.classList.toggle('ok', Boolean(configured));
+  txt.textContent = configured ? '已配置' : '未配置';
+  txt.style.color = configured ? 'var(--green)' : 'var(--text3)';
+}
+
+function syncPlatformStatus(configured = []) {
+  const set = new Set(configured);
+  ['zhihu', 'toutiao', 'baijiahao', 'sohu', 'wechat'].forEach(platform => {
+    setPlatformConfigured(platform, set.has(platform));
+  });
+}
+
 // 检测本地发布服务
 async function checkServer() {
   const dot = document.getElementById('serverDot');
@@ -1259,6 +1479,7 @@ async function checkServer() {
     dot.classList.add('ok');
     const configured = data.configured || [];
     txt.textContent = `已连接 · 已配置平台：${configured.length > 0 ? configured.join('、') : '无'}`;
+    syncPlatformStatus(configured);
   } catch {
     dot.classList.remove('ok');
     txt.textContent = '未连接（请先运行 node server.js）';
@@ -1277,21 +1498,11 @@ async function loadCredentialsFromServer() {
       const dot = document.getElementById('cred-dot-' + p);
       const txt = document.getElementById('cred-status-' + p);
       if (!dot) continue;
-      const hasAuth = creds?.username || creds?.appId;
-      if (hasAuth) {
-        dot.classList.add('ok');
-        txt.textContent = '已配置';
-        txt.style.color = 'var(--green)';
-        // 填充用户名（不填密码，保持安全）
-        const row = document.querySelector(`[data-platform="${p}"]`);
-        if (row) {
-          const userEl = row.querySelector('.cred-user, .cred-appid');
-          if (userEl && (creds.username || creds.appId)) userEl.value = creds.username || creds.appId;
-        }
-      } else {
-        dot.classList.remove('ok');
-        txt.textContent = '未配置';
-        txt.style.color = 'var(--text3)';
+      if (creds?.appId) setPlatformConfigured(p, true);
+      const row = document.querySelector(`[data-platform="${p}"]`);
+      if (row) {
+        const userEl = row.querySelector('.cred-appid');
+        if (userEl && creds?.appId) userEl.value = creds.appId;
       }
     }
   } catch {}
@@ -1302,17 +1513,14 @@ async function saveCredentials() {
   const platforms = {};
   document.querySelectorAll('.platform-cred-row').forEach(row => {
     const p = row.dataset.platform;
+    if (p !== 'wechat') return;
     const userEl = row.querySelector('.cred-user, .cred-appid');
     const passEl = row.querySelector('.cred-pass, .cred-appsecret');
     if (!userEl) return;
     const user = userEl.value.trim();
     const pass = passEl?.value.trim() || '';
     if (!user) return;
-    if (p === 'wechat') {
-      platforms[p] = { appId: user, appSecret: pass };
-    } else {
-      platforms[p] = { username: user, password: pass };
-    }
+    platforms[p] = { appId: user, appSecret: pass };
   });
 
   try {
@@ -1323,7 +1531,7 @@ async function saveCredentials() {
     });
     const data = await res.json();
     if (data.success) {
-      alert('✅ 账号配置已保存到本地 config.json');
+      alert('✅ 公众号配置已保存到本地 config.json');
       await loadCredentialsFromServer();
       await checkServer();
     }
@@ -1332,34 +1540,34 @@ async function saveCredentials() {
   }
 }
 
-function toggleCookieImporter() {
-  const el = document.getElementById('cookieImporter');
-  el.style.display = el.style.display === 'none' ? 'block' : 'none';
-}
-
-async function importCookieFromPanel() {
-  const normalized = document.getElementById('cookiePlatform').value;
-  const cookie = document.getElementById('cookieText').value;
+async function importCookie(platform, cookie) {
   if (!cookie || !cookie.trim()) {
     alert('请先粘贴 Cookie');
     return;
   }
 
   try {
-    const res = await fetch(SERVER + '/api/cookies/' + normalized + '/import', {
+    const res = await fetch(SERVER + '/api/cookies/' + platform + '/import', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cookie }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || '导入失败');
-    alert(`✅ ${normalized} Cookie 已导入，共 ${data.count} 条`);
-    document.getElementById('cookieText').value = '';
-    document.getElementById('cookieImporter').style.display = 'none';
+    alert(`✅ ${platform} Cookie 已导入，共 ${data.count} 条`);
+    setPlatformConfigured(platform, true);
     await checkServer();
+    await loadCredentialsFromServer();
   } catch (e) {
     alert('❌ Cookie 导入失败：' + e.message);
   }
+}
+
+async function saveRowCookie(platform) {
+  const row = document.querySelector(`[data-platform="${platform}"]`);
+  const input = row?.querySelector('.cred-cookie');
+  await importCookie(platform, input?.value || '');
+  if (input) input.value = '';
 }
 
 // 清除 Cookie 缓存
@@ -1369,6 +1577,8 @@ async function clearCookies() {
   try {
     await Promise.all(platforms.map(p => fetch(SERVER + '/api/cookies/' + p, { method: 'DELETE' })));
     alert('✅ 登录缓存已清除');
+    platforms.forEach(p => setPlatformConfigured(p, false));
+    await checkServer();
   } catch (e) {
     alert('清除失败：' + e.message);
   }
@@ -1433,6 +1643,8 @@ async function publishSingle(idx) {
   statusEl.textContent = '发布中...';
   statusEl.style.color = 'var(--yellow)';
 
+  let hasFailure = false;
+  let hasManual = false;
   for (const platform of platforms) {
     addToLog(`▶ 开始发布到 ${platform}...`);
     try {
@@ -1451,20 +1663,30 @@ async function publishSingle(idx) {
       if (error) throw new Error(error);
 
       // 轮询任务状态
-      await pollJob(jobId, addToLog);
+      const result = await pollJob(jobId, addToLog);
+      if (result?.manual) hasManual = true;
     } catch (e) {
+      hasFailure = true;
       addToLog(`❌ ${platform} 发布失败：${e.message}`);
     }
   }
 
-  statusEl.textContent = '已完成';
-  statusEl.style.color = 'var(--green)';
+  if (hasFailure) {
+    statusEl.textContent = '部分失败';
+    statusEl.style.color = 'var(--red)';
+  } else if (hasManual) {
+    statusEl.textContent = '需手动处理';
+    statusEl.style.color = 'var(--yellow)';
+  } else {
+    statusEl.textContent = '已完成';
+    statusEl.style.color = 'var(--green)';
+  }
 }
 
 // 轮询任务状态
 async function pollJob(jobId, addToLog) {
   let lastLogLen = 0;
-  for (let i = 0; i < 120; i++) {
+  for (let i = 0; i < 210; i++) {
     await new Promise(r => setTimeout(r, 2000));
     try {
       const res = await fetch(SERVER + '/api/job/' + jobId);
@@ -1475,13 +1697,16 @@ async function pollJob(jobId, addToLog) {
       newLogs.forEach(l => addToLog(l));
       lastLogLen = (job.log || []).length;
 
+      if ((job.log || []).some(l => l.includes('✅ 发布成功'))) return job.result || {};
+      if ((job.log || []).some(l => l.includes('⚠️ 需要手动处理'))) return { ...(job.result || {}), manual: true };
       if (job.status === 'done') return job.result;
+      if (job.status === 'manual') return { ...(job.result || {}), manual: true };
       if (job.status === 'error') throw new Error(job.error);
     } catch (e) {
       if (e.message && !e.message.includes('fetch')) throw e;
     }
   }
-  throw new Error('超时：发布超过 4 分钟');
+  throw new Error('超时：发布超过 7 分钟');
 }
 
 // 一键发布全部文章
@@ -1490,7 +1715,7 @@ async function publishAll() {
   if (!done.length) { alert('没有可发布的文章'); return; }
   const platforms = getSelectedPlatforms();
   if (!platforms.length) { alert('请至少选择一个发布平台'); return; }
-  if (!confirm(`将把 ${done.length} 篇文章发布到：${platforms.join('、')}\n\n浏览器会依次打开，请保持在旁边处理验证码。确认开始？`)) return;
+  if (!confirm(`将把 ${done.length} 篇文章发布到：${platforms.join('、')}\n\n浏览器会依次打开；如平台停在认证、教程或草稿页，需要你手动处理。确认开始？`)) return;
 
   for (let i = 0; i < done.length; i++) {
     await publishSingle(i);
@@ -1498,6 +1723,7 @@ async function publishAll() {
 }
 
 // 页面加载时自动检测服务
+loadArticleHistory();
 setTimeout(checkServer, 1000);
 </script>
 </body>

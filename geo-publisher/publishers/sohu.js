@@ -5,6 +5,15 @@
 
 const { launchBrowser, saveCookies, loadCookies, waitForManualAction } = require('./base');
 
+async function pastePlainText(page, text) {
+  await page.evaluate(async value => {
+    await navigator.clipboard.writeText(value);
+  }, text);
+  await page.keyboard.down('Control');
+  await page.keyboard.press('KeyV');
+  await page.keyboard.up('Control');
+}
+
 async function publish({ title, content, summary, tags, creds, cookiePath, addLog }) {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -53,8 +62,15 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
 
     // 填写标题
     addLog('填写标题...');
-    await page.waitForSelector('input.article-title-input, .title-input, input[placeholder*="标题"]', { timeout: 15000 });
-    const titleEl = await page.$('input.article-title-input, .title-input, input[placeholder*="标题"]');
+    try {
+      await page.waitForSelector('input.article-title-input, .title-input, input[placeholder*="标题"], textarea[placeholder*="标题"]', { timeout: 15000 });
+    } catch {
+      addLog(`没有找到搜狐标题框，当前页面：${page.url()}`);
+      addLog('请在弹出的浏览器里手动进入搜狐发文编辑器，窗口会保留 5 分钟');
+      await waitForManualAction(addLog, '等待手动处理搜狐编辑器', 300000);
+      return { url: page.url(), manual: true };
+    }
+    const titleEl = await page.$('input.article-title-input, .title-input, input[placeholder*="标题"], textarea[placeholder*="标题"]');
     if (titleEl) { await titleEl.click({ clickCount: 3 }); await titleEl.type(title, { delay: 30 }); }
 
     // 填写正文
@@ -64,7 +80,11 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
       await editorEl.click();
       await page.waitForTimeout(300);
       const plain = content.replace(/#{1,6}\s/g, '\n\n').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').trim();
-      await page.keyboard.type(plain, { delay: 5 });
+      await pastePlainText(page, plain);
+    } else {
+      addLog('没有找到搜狐正文编辑框，请手动确认内容');
+      await waitForManualAction(addLog, '等待手动处理搜狐正文', 300000);
+      return { url: page.url(), manual: true };
     }
 
     addLog('内容填写完毕，准备发布...');

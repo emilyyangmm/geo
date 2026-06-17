@@ -38,6 +38,12 @@ if (!fs.existsSync(COOKIES_DIR)) fs.mkdirSync(COOKIES_DIR, { recursive: true });
 
 // 内存任务队列
 const jobs = {};
+let publishQueue = Promise.resolve();
+
+function enqueuePublish(task) {
+  publishQueue = publishQueue.then(task, task);
+  return publishQueue;
+}
 
 // ===================== 配置管理 =====================
 function loadConfig() {
@@ -257,8 +263,8 @@ app.post('/api/publish', async (req, res) => {
   const jobId = uuidv4();
   jobs[jobId] = { status: 'running', platform, title, log: [] };
 
-  // 异步执行
-  (async () => {
+  // 异步执行；发布浏览器串行启动，避免多个 Chrome 抢同一个用户目录
+  enqueuePublish(async () => {
     const addLog = (msg) => {
       jobs[jobId].log.push(`[${new Date().toLocaleTimeString('zh-CN')}] ${msg}`);
       console.log(`[${platform}] ${msg}`);
@@ -268,6 +274,7 @@ app.post('/api/publish', async (req, res) => {
       let publisherPath = path.join(__dirname, 'publishers', `${platform}.js`);
       if (!fs.existsSync(publisherPath)) throw new Error(`暂不支持平台: ${platform}`);
 
+      delete require.cache[require.resolve(publisherPath)];
       const publisher = require(publisherPath);
       const cookiePath = path.join(COOKIES_DIR, `${platform}.json`);
 
@@ -276,15 +283,20 @@ app.post('/api/publish', async (req, res) => {
         cookiePath, addLog,
       });
 
-      jobs[jobId].status = 'done';
       jobs[jobId].result = result;
-      addLog(`✅ 发布成功` + (result.url ? `：${result.url}` : ''));
+      if (result?.manual) {
+        jobs[jobId].status = 'manual';
+        addLog(`⚠️ 需要手动处理` + (result.url ? `：${result.url}` : ''));
+      } else {
+        jobs[jobId].status = 'done';
+        addLog(`✅ 发布成功` + (result.url ? `：${result.url}` : ''));
+      }
     } catch (e) {
       jobs[jobId].status = 'error';
       jobs[jobId].error = e.message;
       addLog(`❌ 失败：${e.message}`);
     }
-  })();
+  });
 
   res.json({ jobId });
 });
