@@ -1198,9 +1198,15 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
     const coverShotPath = path.join(shotDir, `cover-${Date.now()}.png`);
     await page.screenshot({ path: coverShotPath, fullPage: false }).catch(() => null);
     addLog(`百家号封面处理后截图：${coverShotPath}`);
+
+    addLog('百家号标题、正文、封面已处理，开始点击发布...');
+    const autoPublishResult = await confirmBaijiahaoPublish(page, addLog);
     await saveCookies(page, cookiePath);
-    addLog('百家号已填写标题、正文并尝试处理封面；最终发布先手动确认，窗口会保留 5 分钟');
-    await waitForManualAction(addLog, '等待手动确认百家号编辑结果', 300000);
+    if (autoPublishResult.ok) return { url: autoPublishResult.url || page.url() };
+
+    addLog(`百家号未确认发布成功：${autoPublishResult.reason}`);
+    addLog('请在弹出的浏览器里手动确认最终发布，窗口会保留 5 分钟');
+    await waitForManualAction(addLog, '等待手动发布', 300000);
     return { url: page.url(), manual: true };
 
     // 填写摘要
