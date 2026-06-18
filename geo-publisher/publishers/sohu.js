@@ -28,6 +28,9 @@ async function openSohuArticleEditor(page, addLog) {
   await page.waitForTimeout(5000);
   await clearSohuLoadingMask(page);
 
+  if (page.url().includes('/login') || page.url().includes('passport')) {
+    return false;
+  }
   if (page.url().includes('/news/addarticle')) return true;
 
   addLog(`搜狐直接入口跳转到：${page.url()}，尝试从首页点击发布内容`);
@@ -72,6 +75,9 @@ async function openSohuArticleEditor(page, addLog) {
 
   await page.waitForTimeout(5000);
   await clearSohuLoadingMask(page);
+  if (page.url().includes('/login') || page.url().includes('passport')) {
+    return false;
+  }
   return page.url().includes('/news/addarticle');
 }
 
@@ -118,7 +124,20 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
 
     // 进入发文页
     addLog('打开发文编辑器...');
-    await openSohuArticleEditor(page, addLog);
+    const editorReady = await openSohuArticleEditor(page, addLog);
+    if (!editorReady) {
+      addLog(`搜狐发文页要求重新登录，当前页面：${page.url()}`);
+      addLog('请在弹出的浏览器里完成搜狐登录/验证，登录后窗口会继续保留');
+      await waitForManualAction(addLog, '等待手动登录搜狐号', 300000);
+      await saveCookies(page, cookiePath);
+      addLog('已保存搜狐号 Cookie，重新进入发文编辑器...');
+      const retryReady = await openSohuArticleEditor(page, addLog);
+      if (!retryReady) {
+        addLog(`仍未进入搜狐发文编辑器，当前页面：${page.url()}`);
+        await waitForManualAction(addLog, '等待手动进入搜狐发文编辑器', 300000);
+        return { url: page.url(), manual: true };
+      }
+    }
     await page.waitForTimeout(2000);
 
     // 填写标题
