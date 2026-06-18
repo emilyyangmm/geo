@@ -20,6 +20,44 @@ async function clearSohuLoadingMask(page) {
   }).catch(() => {});
 }
 
+async function dismissSohuTips(page, addLog) {
+  const clicked = await page.evaluate(() => {
+    const isVisible = (node) => {
+      const style = window.getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 4 && rect.height > 4;
+    };
+    const candidates = [...document.querySelectorAll('button, a, div, span, i, [role="button"]')]
+      .filter(isVisible)
+      .map(node => ({
+        node,
+        text: (node.innerText || node.textContent || '').replace(/\s+/g, ''),
+        className: String(node.className || ''),
+        aria: node.getAttribute('aria-label') || '',
+        rect: node.getBoundingClientRect(),
+      }))
+      .filter(item => (
+        item.text === '我知道了' ||
+        item.text === '知道了' ||
+        item.text === '关闭' ||
+        item.aria.includes('关闭') ||
+        item.className.includes('close')
+      ))
+      .sort((a, b) => {
+        const score = item => (item.text === '我知道了' ? 0 : item.text === '知道了' ? 1 : item.text === '关闭' ? 2 : 3);
+        return score(a) - score(b);
+      });
+    const target = candidates[0]?.node;
+    if (!target) return '';
+    target.click();
+    return candidates[0].text || candidates[0].aria || candidates[0].className;
+  }).catch(() => '');
+  if (clicked) {
+    addLog(`已关闭搜狐引导弹窗：${clicked}`);
+    await page.waitForTimeout(800);
+  }
+}
+
 async function getSohuCookieHint(cookiePath) {
   try {
     const fs = require('fs');
@@ -306,6 +344,7 @@ async function publishFixed({ title, content, summary, tags, creds, cookiePath, 
     }
 
     addLog(`已进入搜狐发文编辑器：${page.url()}`);
+    await dismissSohuTips(page, addLog);
     addLog('填写标题...');
     await page.waitForSelector('input[placeholder*="标题"], textarea[placeholder*="标题"], input.article-title-input, .title-input', { timeout: 20000 });
     const titleEl = await page.$('input[placeholder*="标题"], textarea[placeholder*="标题"], input.article-title-input, .title-input');
@@ -315,12 +354,27 @@ async function publishFixed({ title, content, summary, tags, creds, cookiePath, 
     await titleEl.type(title, { delay: 30 });
 
     addLog('填写正文...');
+    await dismissSohuTips(page, addLog);
     await page.waitForSelector('.ql-editor, [contenteditable="true"]', { timeout: 20000 });
     const editorEl = await page.$('.ql-editor, [contenteditable="true"]');
     if (!editorEl) throw new Error('没有找到搜狐正文编辑框');
+    await editorEl.evaluate(node => node.scrollIntoView({ block: 'center' })).catch(() => {});
     await editorEl.click();
     await page.waitForTimeout(300);
     await pastePlainText(page, plainContent);
+    const bodyLength = await page.evaluate(() => {
+      const editor = document.querySelector('.ql-editor, [contenteditable="true"]');
+      return (editor?.innerText || editor?.textContent || '').trim().length;
+    }).catch(() => 0);
+    if (bodyLength < Math.min(50, plainContent.length)) {
+      addLog('第一次填写正文未生效，尝试用编辑区坐标重新填写...');
+      const box = await editorEl.boundingBox();
+      if (box) {
+        await page.mouse.click(box.x + Math.min(80, box.width / 2), box.y + Math.min(80, box.height / 2));
+        await page.waitForTimeout(300);
+        await pastePlainText(page, plainContent);
+      }
+    }
 
     addLog('搜狐标题和正文已填写，最终发布按钮请在弹出的浏览器里确认');
     await saveCookies(page, cookiePath);
