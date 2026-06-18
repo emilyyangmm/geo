@@ -14,6 +14,67 @@ async function pastePlainText(page, text) {
   await page.keyboard.up('Control');
 }
 
+async function clearSohuLoadingMask(page) {
+  await page.evaluate(() => {
+    document.querySelectorAll('.el-loading-mask').forEach(node => node.remove());
+  }).catch(() => {});
+}
+
+async function openSohuArticleEditor(page, addLog) {
+  const editorUrl = 'https://mp.sohu.com/mpfe/v4/contentManagement/news/addarticle';
+  const homeUrl = 'https://mp.sohu.com/mpfe/v4/contentManagement/first/page';
+
+  await page.goto(editorUrl, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(5000);
+  await clearSohuLoadingMask(page);
+
+  if (page.url().includes('/news/addarticle')) return true;
+
+  addLog(`搜狐直接入口跳转到：${page.url()}，尝试从首页点击发布内容`);
+  if (!page.url().includes('/contentManagement/first/page')) {
+    await page.goto(homeUrl, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(5000);
+  }
+  await clearSohuLoadingMask(page);
+
+  const clicked = await page.evaluate(() => {
+    const isVisible = (node) => {
+      const style = window.getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 4 && rect.height > 4;
+    };
+    const candidates = [...document.querySelectorAll('button, a, div, span, [role="button"]')]
+      .filter(isVisible)
+      .map(node => {
+        const rect = node.getBoundingClientRect();
+        const text = (node.innerText || node.textContent || '').replace(/\s+/g, '');
+        return { node, rect, text, area: rect.width * rect.height };
+      })
+      .filter(item => item.text === '发布内容' || item.text.includes('快来发布新内容'))
+      .sort((a, b) => {
+        if (a.text === '发布内容' && b.text !== '发布内容') return -1;
+        if (b.text === '发布内容' && a.text !== '发布内容') return 1;
+        return a.area - b.area;
+      });
+    const target = candidates[0]?.node;
+    if (!target) return '';
+    target.scrollIntoView({ block: 'center' });
+    target.click();
+    return candidates[0].text;
+  });
+
+  if (!clicked) {
+    await page.mouse.click(675, 115).catch(() => {});
+    addLog('未匹配到搜狐发布按钮文本，已按黄色发布按钮区域点击');
+  } else {
+    addLog(`已点击搜狐入口：${clicked}`);
+  }
+
+  await page.waitForTimeout(5000);
+  await clearSohuLoadingMask(page);
+  return page.url().includes('/news/addarticle');
+}
+
 async function publish({ title, content, summary, tags, creds, cookiePath, addLog }) {
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -57,12 +118,13 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
 
     // 进入发文页
     addLog('打开发文编辑器...');
-    await page.goto('https://mp.sohu.com/mcms/article/edit', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(3000);
+    await openSohuArticleEditor(page, addLog);
+    await page.waitForTimeout(2000);
 
     // 填写标题
     addLog('填写标题...');
     try {
+      await clearSohuLoadingMask(page);
       await page.waitForSelector('input.article-title-input, .title-input, input[placeholder*="标题"], textarea[placeholder*="标题"]', { timeout: 15000 });
     } catch {
       addLog(`没有找到搜狐标题框，当前页面：${page.url()}`);
