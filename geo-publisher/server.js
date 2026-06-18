@@ -246,6 +246,17 @@ app.post('/api/cookies/:platform/import', (req, res) => {
   const cookies = parseCookieInput(req.body.cookie || req.body.cookies || '', domain);
   if (!cookies.length) return res.status(400).json({ error: '没有识别到有效 Cookie' });
 
+  if (platform === 'sohu') {
+    const names = new Set(cookies.map(cookie => cookie.name));
+    const required = ['ppinf', 'pprdig', 'ppmdig'];
+    const missing = required.filter(name => !names.has(name));
+    if (missing.length) {
+      return res.status(400).json({
+        error: `搜狐 Cookie 不完整，缺少登录态字段：${missing.join('、')}。请从已登录的 mp.sohu.com 页面复制完整 Cookie，不要只复制 Network 里单个请求的访客 Cookie。`,
+      });
+    }
+  }
+
   fs.writeFileSync(path.join(COOKIES_DIR, `${platform}.json`), JSON.stringify(cookies, null, 2));
   res.json({ success: true, count: cookies.length });
 });
