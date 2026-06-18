@@ -20,6 +20,20 @@ async function clearSohuLoadingMask(page) {
   }).catch(() => {});
 }
 
+async function getSohuCookieHint(cookiePath) {
+  try {
+    const fs = require('fs');
+    if (!fs.existsSync(cookiePath)) return '当前没有保存搜狐 Cookie';
+    const cookies = JSON.parse(fs.readFileSync(cookiePath, 'utf8'));
+    const names = new Set(cookies.map(cookie => cookie.name));
+    const missing = ['ppinf', 'pprdig', 'ppmdig'].filter(name => !names.has(name));
+    if (missing.length) return `搜狐 Cookie 缺少登录态字段：${missing.join('、')}`;
+    return '搜狐 Cookie 有登录态字段，但可能已过期或被搜狐后台拒绝';
+  } catch {
+    return '搜狐 Cookie 文件读取失败';
+  }
+}
+
 async function openSohuArticleEditor(page, addLog) {
   const editorUrl = 'https://mp.sohu.com/mpfe/v4/contentManagement/news/addarticle';
   const homeUrl = 'https://mp.sohu.com/mpfe/v4/contentManagement/first/page';
@@ -127,6 +141,7 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
     const editorReady = await openSohuArticleEditor(page, addLog);
     if (!editorReady) {
       addLog(`搜狐发文页要求重新登录，当前页面：${page.url()}`);
+      addLog(await getSohuCookieHint(cookiePath));
       addLog('请在弹出的浏览器里完成搜狐登录/验证，登录后窗口会继续保留');
       await waitForManualAction(addLog, '等待手动登录搜狐号', 300000);
       await saveCookies(page, cookiePath);
