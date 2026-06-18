@@ -76,29 +76,32 @@ async function clickSohuFinalPublish(page, addLog) {
       .sort((a, b) => {
         const bottomScore = item => item.rect.top > window.innerHeight * 0.55 ? 0 : 1;
         const exactScore = item => wantedTexts.indexOf(item.text);
-        return bottomScore(a) - bottomScore(b) || exactScore(a) - exactScore(b) || a.area - b.area;
+        return bottomScore(a) - bottomScore(b) || exactScore(a) - exactScore(b) || b.rect.top - a.rect.top || a.area - b.area;
       });
-    const target = candidates[0]?.node;
-    if (!target) return '';
-    target.scrollIntoView({ block: 'center' });
-    target.click();
-    return candidates[0].text;
+    const item = candidates[0];
+    if (!item) return null;
+    item.node.scrollIntoView({ block: 'center' });
+    const rect = item.node.getBoundingClientRect();
+    return { text: item.text, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
   }, texts).catch(() => '');
 
   addLog('尝试点击搜狐最终发布按钮...');
   await dismissSohuTips(page, addLog);
   let clicked = await clickButtonByText(['发布']);
   if (!clicked) {
-    await page.mouse.click(535, 957).catch(() => {});
-    clicked = '发布按钮区域';
+    await page.mouse.click(197, 920).catch(() => {});
+    clicked = { text: '发布按钮区域', x: 197, y: 920 };
+  } else {
+    await page.mouse.click(clicked.x, clicked.y).catch(() => {});
   }
-  addLog(`已点击搜狐按钮：${clicked}`);
+  addLog(`已点击搜狐按钮：${clicked.text}`);
   await page.waitForTimeout(2500);
 
   for (let i = 0; i < 3; i++) {
     const confirmed = await clickButtonByText(['确认', '确定', '发布']);
     if (!confirmed) break;
-    addLog(`已点击搜狐确认按钮：${confirmed}`);
+    await page.mouse.click(confirmed.x, confirmed.y).catch(() => {});
+    addLog(`已点击搜狐确认按钮：${confirmed.text}`);
     await page.waitForTimeout(2500);
   }
 
