@@ -38,8 +38,9 @@ async function openSohuArticleEditor(page, addLog) {
   const editorUrl = 'https://mp.sohu.com/mpfe/v4/contentManagement/news/addarticle';
   const homeUrl = 'https://mp.sohu.com/mpfe/v4/contentManagement/first/page';
 
-  await page.goto(editorUrl, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(5000);
+  // 搜狐后台会拦截直接打开编辑器的请求；先进入已登录首页再点“发布内容”更稳定。
+  await page.goto(homeUrl, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(8000);
   await clearSohuLoadingMask(page);
 
   if (page.url().includes('/login') || page.url().includes('passport')) {
@@ -47,12 +48,7 @@ async function openSohuArticleEditor(page, addLog) {
   }
   if (page.url().includes('/news/addarticle')) return true;
 
-  addLog(`搜狐直接入口跳转到：${page.url()}，尝试从首页点击发布内容`);
-  if (!page.url().includes('/contentManagement/first/page')) {
-    await page.goto(homeUrl, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(5000);
-  }
-  await clearSohuLoadingMask(page);
+  addLog(`搜狐首页登录态有效，当前页面：${page.url()}，从后台首页点击发布内容`);
 
   const clicked = await page.evaluate(() => {
     const isVisible = (node) => {
@@ -82,16 +78,25 @@ async function openSohuArticleEditor(page, addLog) {
 
   if (!clicked) {
     await page.mouse.click(675, 115).catch(() => {});
-    addLog('未匹配到搜狐发布按钮文本，已按黄色发布按钮区域点击');
+    addLog('未匹配到搜狐发布内容按钮文本，已点击黄色发布按钮区域');
   } else {
     addLog(`已点击搜狐入口：${clicked}`);
   }
 
-  await page.waitForTimeout(5000);
+  await Promise.race([
+    page.waitForFunction(() => location.href.includes('/news/addarticle'), { timeout: 12000 }).catch(() => null),
+    page.waitForTimeout(12000),
+  ]);
   await clearSohuLoadingMask(page);
   if (page.url().includes('/login') || page.url().includes('passport')) {
     return false;
   }
+  if (page.url().includes('/news/addarticle')) return true;
+
+  addLog(`点击发布入口后仍未进入搜狐编辑器，当前页面：${page.url()}，最后尝试直接打开编辑器`);
+  await page.goto(editorUrl, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(5000);
+  await clearSohuLoadingMask(page);
   return page.url().includes('/news/addarticle');
 }
 
