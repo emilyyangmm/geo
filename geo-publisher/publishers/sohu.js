@@ -58,6 +58,69 @@ async function dismissSohuTips(page, addLog) {
   }
 }
 
+async function clickSohuFinalPublish(page, addLog) {
+  const clickButtonByText = async (texts) => page.evaluate((wantedTexts) => {
+    const isVisible = (node) => {
+      const style = window.getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 8 && rect.height > 8;
+    };
+    const candidates = [...document.querySelectorAll('button, a, div, span, [role="button"]')]
+      .filter(isVisible)
+      .map(node => {
+        const rect = node.getBoundingClientRect();
+        const text = (node.innerText || node.textContent || '').replace(/\s+/g, '');
+        return { node, text, rect, area: rect.width * rect.height };
+      })
+      .filter(item => wantedTexts.includes(item.text))
+      .sort((a, b) => {
+        const bottomScore = item => item.rect.top > window.innerHeight * 0.55 ? 0 : 1;
+        const exactScore = item => wantedTexts.indexOf(item.text);
+        return bottomScore(a) - bottomScore(b) || exactScore(a) - exactScore(b) || a.area - b.area;
+      });
+    const target = candidates[0]?.node;
+    if (!target) return '';
+    target.scrollIntoView({ block: 'center' });
+    target.click();
+    return candidates[0].text;
+  }, texts).catch(() => '');
+
+  addLog('尝试点击搜狐最终发布按钮...');
+  await dismissSohuTips(page, addLog);
+  let clicked = await clickButtonByText(['发布']);
+  if (!clicked) {
+    await page.mouse.click(535, 957).catch(() => {});
+    clicked = '发布按钮区域';
+  }
+  addLog(`已点击搜狐按钮：${clicked}`);
+  await page.waitForTimeout(2500);
+
+  for (let i = 0; i < 3; i++) {
+    const confirmed = await clickButtonByText(['确认', '确定', '发布']);
+    if (!confirmed) break;
+    addLog(`已点击搜狐确认按钮：${confirmed}`);
+    await page.waitForTimeout(2500);
+  }
+
+  const success = await page.evaluate(() => {
+    const text = document.body?.innerText || '';
+    return ['发布成功', '提交成功', '审核中', '已发布'].some(keyword => text.includes(keyword));
+  }).catch(() => false);
+
+  if (success) {
+    addLog('搜狐发布成功提示已检测到');
+    return true;
+  }
+
+  if (!page.url().includes('/news/addarticle')) {
+    addLog(`搜狐发布后页面已跳转：${page.url()}`);
+    return true;
+  }
+
+  addLog('搜狐未检测到明确成功提示，请看弹出的浏览器是否有额外校验');
+  return false;
+}
+
 async function getSohuCookieHint(cookiePath) {
   try {
     const fs = require('fs');
@@ -376,10 +439,14 @@ async function publishFixed({ title, content, summary, tags, creds, cookiePath, 
       }
     }
 
-    addLog('搜狐标题和正文已填写，最终发布按钮请在弹出的浏览器里确认');
     await saveCookies(page, cookiePath);
-    await waitForManualAction(addLog, '等待手动确认搜狐发布', 300000);
-    return { url: page.url(), manual: true };
+    addLog('搜狐标题和正文已填写，开始自动发布...');
+    const published = await clickSohuFinalPublish(page, addLog);
+    if (!published) {
+      await waitForManualAction(addLog, '等待手动处理搜狐最终发布', 300000);
+      return { url: page.url(), manual: true };
+    }
+    return { url: page.url() };
   } finally {
     await browser.close();
   }
