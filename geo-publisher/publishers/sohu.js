@@ -208,4 +208,127 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
   }
 }
 
-module.exports = { publish };
+async function publishFixed({ title, content, summary, tags, creds, cookiePath, addLog }) {
+  const browser = await launchBrowser();
+  const page = await browser.newPage();
+
+  const isLoginUrl = () => page.url().includes('/login') || page.url().includes('passport');
+  const plainContent = (content || '')
+    .replace(/#{1,6}\s/g, '\n\n')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .trim();
+
+  try {
+    addLog('加载搜狐 Cookie，打开搜狐号后台首页...');
+    const hasCookies = await loadCookies(page, cookiePath);
+    if (!hasCookies) {
+      addLog('本地没有搜狐 Cookie，请先保存搜狐 Cookie');
+      return { url: page.url(), manual: true };
+    }
+
+    await page.goto('https://mp.sohu.com/mpfe/v4/contentManagement/first/page', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(8000);
+    await clearSohuLoadingMask(page);
+
+    if (isLoginUrl()) {
+      addLog(`搜狐 Cookie 已加载，但后台仍要求登录，当前页面：${page.url()}`);
+      addLog(await getSohuCookieHint(cookiePath));
+      await waitForManualAction(addLog, '等待手动登录搜狐号', 300000);
+      await saveCookies(page, cookiePath);
+      return { url: page.url(), manual: true };
+    }
+
+    const backendReady = await page.evaluate(() => {
+      const text = document.body?.innerText || '';
+      return ['发布内容', '我的内容', '账号积分', '总阅读量', '搜狐号'].some(keyword => text.includes(keyword));
+    }).catch(() => false);
+
+    if (!backendReady) {
+      addLog(`没有检测到搜狐号后台关键元素，当前页面：${page.url()}`);
+      await waitForManualAction(addLog, '等待手动确认搜狐后台是否已加载', 300000);
+      return { url: page.url(), manual: true };
+    }
+
+    addLog(`搜狐号后台已登录，当前页面：${page.url()}`);
+    addLog('点击搜狐号“发布内容”入口...');
+
+    const clickedEntry = await page.evaluate(() => {
+      const isVisible = (node) => {
+        const style = window.getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 4 && rect.height > 4;
+      };
+      const candidates = [...document.querySelectorAll('button, a, div, span, [role="button"]')]
+        .filter(isVisible)
+        .map(node => ({
+          node,
+          text: (node.innerText || node.textContent || '').replace(/\s+/g, ''),
+          area: node.getBoundingClientRect().width * node.getBoundingClientRect().height,
+        }))
+        .filter(item => item.text === '发布内容' || item.text.includes('快来发布新内容'))
+        .sort((a, b) => {
+          if (a.text === '发布内容' && b.text !== '发布内容') return -1;
+          if (b.text === '发布内容' && a.text !== '发布内容') return 1;
+          return a.area - b.area;
+        });
+      const target = candidates[0]?.node;
+      if (!target) return '';
+      target.scrollIntoView({ block: 'center' });
+      target.click();
+      return candidates[0].text;
+    }).catch(() => '');
+
+    if (clickedEntry) {
+      addLog(`已点击搜狐入口：${clickedEntry}`);
+    } else {
+      await page.mouse.click(675, 115).catch(() => {});
+      addLog('没匹配到“发布内容”文字，已点击黄色发布按钮区域');
+    }
+
+    await Promise.race([
+      page.waitForFunction(() => location.href.includes('/news/addarticle'), { timeout: 15000 }).catch(() => null),
+      page.waitForTimeout(15000),
+    ]);
+    await clearSohuLoadingMask(page);
+
+    if (!page.url().includes('/news/addarticle')) {
+      addLog(`点击入口后未进入编辑器，当前页面：${page.url()}，尝试直接打开编辑器`);
+      await page.goto('https://mp.sohu.com/mpfe/v4/contentManagement/news/addarticle', { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(6000);
+      await clearSohuLoadingMask(page);
+    }
+
+    if (!page.url().includes('/news/addarticle') || isLoginUrl()) {
+      addLog(`仍未进入搜狐发文编辑器，当前页面：${page.url()}`);
+      await waitForManualAction(addLog, '等待手动进入搜狐发文编辑器', 300000);
+      return { url: page.url(), manual: true };
+    }
+
+    addLog(`已进入搜狐发文编辑器：${page.url()}`);
+    addLog('填写标题...');
+    await page.waitForSelector('input[placeholder*="标题"], textarea[placeholder*="标题"], input.article-title-input, .title-input', { timeout: 20000 });
+    const titleEl = await page.$('input[placeholder*="标题"], textarea[placeholder*="标题"], input.article-title-input, .title-input');
+    if (!titleEl) throw new Error('没有找到搜狐标题框');
+    await titleEl.click({ clickCount: 3 });
+    await page.keyboard.press('Backspace').catch(() => {});
+    await titleEl.type(title, { delay: 30 });
+
+    addLog('填写正文...');
+    await page.waitForSelector('.ql-editor, [contenteditable="true"]', { timeout: 20000 });
+    const editorEl = await page.$('.ql-editor, [contenteditable="true"]');
+    if (!editorEl) throw new Error('没有找到搜狐正文编辑框');
+    await editorEl.click();
+    await page.waitForTimeout(300);
+    await pastePlainText(page, plainContent);
+
+    addLog('搜狐标题和正文已填写，最终发布按钮请在弹出的浏览器里确认');
+    await saveCookies(page, cookiePath);
+    await waitForManualAction(addLog, '等待手动确认搜狐发布', 300000);
+    return { url: page.url(), manual: true };
+  } finally {
+    await browser.close();
+  }
+}
+
+module.exports = { publish: publishFixed };
