@@ -177,10 +177,15 @@ async function clickBaijiahaoPublishButton(page) {
       return b.rect.x - a.rect.x;
     });
     const target = buttons[0];
-    if (!target) return '';
+    if (!target) return null;
     target.node.scrollIntoView({ block: 'center' });
-    target.node.click();
-    return `${target.text}@${Math.round(target.rect.x)},${Math.round(target.rect.y)}`;
+    const rect = target.node.getBoundingClientRect();
+    return {
+      text: target.text,
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+      note: `${target.text}@${Math.round(rect.x)},${Math.round(rect.y)}`,
+    };
   });
 }
 
@@ -723,7 +728,12 @@ async function confirmBaijiahaoPublish(page, addLog) {
   await dismissBaijiahaoGuides(page, addLog);
   const clicked = await clickBaijiahaoPublishButton(page) || await clickVisibleButtonByText(page, ['确认发布', '提交发布', '发布']);
   if (!clicked) return { ok: false, reason: '未找到发布按钮' };
-  addLog(`已点击百家号按钮：${clicked}`);
+  if (typeof clicked === 'object') {
+    await page.mouse.click(clicked.x, clicked.y);
+    addLog(`已点击百家号按钮：${clicked.note || clicked.text}`);
+  } else {
+    addLog(`已点击百家号按钮：${clicked}`);
+  }
   await Promise.race([
     page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 8000 }).catch(() => null),
     page.waitForTimeout(3000),
@@ -732,7 +742,12 @@ async function confirmBaijiahaoPublish(page, addLog) {
   for (let i = 0; i < 3; i++) {
     const second = await clickBaijiahaoConfirm(page);
     if (!second) break;
-    addLog(`已点击百家号确认按钮：${second}`);
+    if (typeof second === 'object') {
+      await page.mouse.click(second.x, second.y);
+      addLog(`已点击百家号确认按钮：${second.text}`);
+    } else {
+      addLog(`已点击百家号确认按钮：${second}`);
+    }
     await Promise.race([
       page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 8000 }).catch(() => null),
       page.waitForTimeout(2500),
@@ -790,10 +805,14 @@ async function clickBaijiahaoConfirm(page) {
       return ['确认发布', '确定发布', '提交发布', '确认', '确定'].some(t => text === t || text.includes(t));
     });
     const target = candidates[candidates.length - 1];
-    if (!target) return '';
+    if (!target) return null;
     target.scrollIntoView({ block: 'center' });
-    target.click();
-    return (target.innerText || target.textContent || '').trim();
+    const rect = target.getBoundingClientRect();
+    return {
+      text: (target.innerText || target.textContent || '').trim(),
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    };
   });
 }
 
