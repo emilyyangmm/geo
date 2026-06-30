@@ -9,11 +9,23 @@ async function pastePlainText(page, text) {
   const inserted = await page.evaluate((value) => {
     const editor = document.querySelector('.ql-editor, [contenteditable="true"]');
     if (!editor) return false;
+    const escapeHtml = (input) => String(input)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+    const paragraphs = String(value)
+      .split(/\n{2,}/)
+      .map(part => part.trim())
+      .filter(Boolean)
+      .map(part => `<p>${escapeHtml(part).replace(/\n/g, '<br>')}</p>`)
+      .join('');
     editor.focus();
-    document.execCommand('selectAll', false, null);
-    document.execCommand('insertText', false, value);
-    editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value.slice(0, 1) }));
+    editor.innerHTML = paragraphs || `<p>${escapeHtml(value)}</p>`;
+    editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertFromPaste' }));
     editor.dispatchEvent(new Event('change', { bubbles: true }));
+    editor.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
     return true;
   }, text).catch(() => false);
   if (inserted) return;
