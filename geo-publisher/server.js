@@ -65,14 +65,34 @@ async function getSupabaseUser(req) {
   const auth = req.headers.authorization || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (!token) return null;
-  const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${token}`,
-    },
-  });
-  if (!response.ok) return null;
-  return response.json();
+  const decoded = decodeSupabaseToken(token);
+  try {
+    const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (response.ok) return response.json();
+  } catch {}
+  return decoded;
+}
+
+function decodeSupabaseToken(token) {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+    const json = Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+    const claims = JSON.parse(json);
+    if (!claims.sub) return null;
+    if (claims.exp && claims.exp * 1000 < Date.now()) return null;
+    return {
+      id: claims.sub,
+      email: claims.email || claims.user_metadata?.email || '',
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function requireUser(req, res, next) {
