@@ -120,6 +120,11 @@ async function pasteContent(page, selector, html) {
 
 // 等待手动操作（让用户处理验证码）
 async function waitForManualAction(addLog, message, timeout = 60000) {
+  if (process.platform === 'linux' && !process.env.DISPLAY) {
+    addLog(`⚠️ ${message}：线上服务器浏览器不可见，无法手动处理，已跳过长时间等待`);
+    await new Promise(r => setTimeout(r, Math.min(timeout, 5000)));
+    return;
+  }
   addLog(`⚠️ ${message}（等待 ${timeout/1000} 秒）`);
   await new Promise(r => setTimeout(r, timeout));
 }
