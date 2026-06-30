@@ -6,6 +6,19 @@
 const { launchBrowser, saveCookies, loadCookies, waitForManualAction } = require('./base');
 
 async function pastePlainText(page, text) {
+  const inserted = await page.evaluate((value) => {
+    const editor = document.querySelector('.ql-editor, [contenteditable="true"]');
+    if (!editor) return false;
+    editor.focus();
+    document.execCommand('selectAll', false, null);
+    document.execCommand('insertText', false, value);
+    editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value.slice(0, 1) }));
+    editor.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }, text).catch(() => false);
+  if (inserted) return;
+
+  await page.bringToFront().catch(() => {});
   await page.evaluate(async value => {
     await navigator.clipboard.writeText(value);
   }, text);
@@ -66,6 +79,7 @@ async function clickSohuFinalPublish(page, addLog) {
       return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 20 && rect.height > 20;
     };
     const isYellow = (color) => /rgb\(\s*25[0-5]\s*,\s*(1[6-9]\d|2[0-4]\d|25[0-5])\s*,\s*0?\d{1,2}\s*\)/.test(color || '');
+    const isPublishText = (text) => text.includes('发布') && !/(定时|预览|存草稿|今天还能|不能发)/.test(text);
     const candidates = [...document.querySelectorAll('button, a, div, span, [role="button"]')]
       .filter(isVisible)
       .map(node => {
@@ -84,7 +98,7 @@ async function clickSohuFinalPublish(page, addLog) {
           disabled: node.disabled || node.getAttribute('aria-disabled') === 'true' || String(node.className || '').includes('disabled'),
         };
       })
-      .filter(item => item.text === '发布' && !item.disabled)
+      .filter(item => isPublishText(item.text) && !item.disabled)
       .sort((a, b) => {
         if (a.yellow !== b.yellow) return a.yellow ? -1 : 1;
         if (a.bottomish !== b.bottomish) return a.bottomish ? -1 : 1;
@@ -149,12 +163,18 @@ async function clickSohuFinalPublish(page, addLog) {
             x: rect.left + rect.width / 2,
             y: rect.top + rect.height / 2,
             top: rect.top,
+            bottomish: rect.top > window.innerHeight * 0.62,
             area: rect.width * rect.height,
             bg: style.backgroundColor,
+            yellow: /rgb\(\s*25[0-5]\s*,\s*(1[6-9]\d|2[0-4]\d|25[0-5])\s*,\s*0?\d{1,2}\s*\)/.test(style.backgroundColor || ''),
           };
         })
-        .filter(item => item.text === '发布')
-        .sort((a, b) => b.top - a.top || a.area - b.area);
+        .filter(item => item.text.includes('发布') && !/(定时|预览|存草稿|今天还能|不能发)/.test(item.text))
+        .sort((a, b) => {
+          if (a.yellow !== b.yellow) return a.yellow ? -1 : 1;
+          if (a.bottomish !== b.bottomish) return a.bottomish ? -1 : 1;
+          return b.top - a.top || a.area - b.area;
+        });
       return candidates[0] || null;
     }).catch(() => null);
     if (fallback) {
@@ -162,13 +182,11 @@ async function clickSohuFinalPublish(page, addLog) {
       clicked = { text: `发布按钮坐标兜底@${Math.round(fallback.x)},${Math.round(fallback.y)}` };
     } else {
       const viewport = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight })).catch(() => page.viewport() || { width: 1365, height: 768 });
-      const x = Math.max(120, Math.round(viewport.width * 0.12));
-      const y = Math.max(120, Math.round(viewport.height - 55));
+      const x = Math.max(160, Math.round(viewport.width * 0.28));
+      const y = Math.max(120, Math.round(viewport.height - 42));
       await page.mouse.click(x, y).catch(() => {});
       clicked = { text: `发布按钮固定兜底@${x},${y}` };
     }
-  } else {
-    await page.mouse.click(clicked.x, clicked.y).catch(() => {});
   }
   addLog(`已点击搜狐按钮：${clicked.text}`);
   await page.waitForTimeout(2500);
