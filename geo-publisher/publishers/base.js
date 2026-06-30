@@ -129,4 +129,21 @@ async function waitForManualAction(addLog, message, timeout = 60000) {
   await new Promise(r => setTimeout(r, timeout));
 }
 
-module.exports = { launchBrowser, saveCookies, loadCookies, mdToHtml, clickSelector, typeInSelector, pasteContent, waitForManualAction };
+async function saveDebugSnapshot(page, platform, label, addLog) {
+  const dir = path.join(process.cwd(), 'tmp', 'publisher-debug');
+  fs.mkdirSync(dir, { recursive: true });
+  const stamp = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+  const base = path.join(dir, `${platform}-${label}-${stamp}`);
+  try {
+    await page.screenshot({ path: `${base}.png`, fullPage: true });
+  } catch {}
+  try {
+    const text = await page.evaluate(() => (document.body.innerText || '').replace(/\s+/g, ' ').slice(0, 3000));
+    fs.writeFileSync(`${base}.txt`, `URL: ${page.url()}\n\n${text}`, 'utf8');
+  } catch {}
+  addLog(`调试截图：${base}.png`);
+  addLog(`调试文本：${base}.txt`);
+  return base;
+}
+
+module.exports = { launchBrowser, saveCookies, loadCookies, mdToHtml, clickSelector, typeInSelector, pasteContent, waitForManualAction, saveDebugSnapshot };

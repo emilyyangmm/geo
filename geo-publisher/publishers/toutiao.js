@@ -3,7 +3,7 @@
  * 登录地址: https://mp.toutiao.com
  */
 
-const { launchBrowser, saveCookies, loadCookies, waitForManualAction } = require('./base');
+const { launchBrowser, saveCookies, loadCookies, waitForManualAction, saveDebugSnapshot } = require('./base');
 const fs = require('fs');
 const path = require('path');
 
@@ -462,7 +462,8 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
     if (publishResult.ok) return { url: publishResult.url || page.url() };
 
     addLog(`头条未确认发布成功：${publishResult.reason}`);
-    addLog('请在弹出的浏览器里手动确认最终发布，窗口会保留 5 分钟');
+    await saveDebugSnapshot(page, 'toutiao', 'publish-blocked', addLog);
+    addLog('头条仍停在发布页，已保存截图；线上服务器无法人工点确认');
     await waitForManualAction(addLog, '等待手动确认头条发布', 300000);
     return { url: page.url(), manual: true };
 
