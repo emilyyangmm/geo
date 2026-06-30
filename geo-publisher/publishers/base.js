@@ -22,6 +22,7 @@ function findChromeExecutable() {
     '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
     '/usr/bin/google-chrome',
     '/usr/bin/google-chrome-stable',
+    '/usr/bin/ungoogled-chromium',
     '/usr/bin/chromium',
     '/usr/bin/chromium-browser',
   ].filter(Boolean);
