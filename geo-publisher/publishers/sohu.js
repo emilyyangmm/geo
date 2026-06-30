@@ -87,10 +87,45 @@ async function clickSohuFinalPublish(page, addLog) {
 
   addLog('尝试点击搜狐最终发布按钮...');
   await dismissSohuTips(page, addLog);
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
+  await page.waitForTimeout(600);
   let clicked = await clickButtonByText(['发布']);
   if (!clicked) {
-    await page.mouse.click(197, 920).catch(() => {});
-    clicked = { text: '发布按钮区域', x: 197, y: 920 };
+    const fallback = await page.evaluate(() => {
+      const isVisible = (node) => {
+        const style = window.getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 20 && rect.height > 20;
+      };
+      const candidates = [...document.querySelectorAll('button, a, div, span, [role="button"]')]
+        .filter(isVisible)
+        .map(node => {
+          const rect = node.getBoundingClientRect();
+          const text = (node.innerText || node.textContent || '').replace(/\s+/g, '');
+          const style = getComputedStyle(node);
+          return {
+            text,
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2,
+            top: rect.top,
+            area: rect.width * rect.height,
+            bg: style.backgroundColor,
+          };
+        })
+        .filter(item => item.text === '发布')
+        .sort((a, b) => b.top - a.top || a.area - b.area);
+      return candidates[0] || null;
+    }).catch(() => null);
+    if (fallback) {
+      await page.mouse.click(fallback.x, fallback.y).catch(() => {});
+      clicked = { text: `发布按钮坐标兜底@${Math.round(fallback.x)},${Math.round(fallback.y)}` };
+    } else {
+      const viewport = page.viewport() || { width: 1365, height: 768 };
+      const x = Math.max(120, Math.round(viewport.width * 0.12));
+      const y = Math.max(120, Math.round(viewport.height - 45));
+      await page.mouse.click(x, y).catch(() => {});
+      clicked = { text: `发布按钮固定兜底@${x},${y}` };
+    }
   } else {
     await page.mouse.click(clicked.x, clicked.y).catch(() => {});
   }
