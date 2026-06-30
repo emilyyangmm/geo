@@ -2,7 +2,7 @@
  * 基础工具：Cookie 存储、Puppeteer 浏览器启动、Markdown 转换
  */
 
-const puppeteer = require('puppeteer-core');
+let puppeteer = require('puppeteer-core');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -17,6 +17,7 @@ function findChromeExecutable() {
     `${process.env.LOCALAPPDATA || ''}\\Google\\Chrome\\Application\\chrome.exe`,
     'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
     'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+    `${process.env.LOCALAPPDATA || ''}\\Microsoft\\Edge\\Application\\msedge.exe`,
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
     '/usr/bin/google-chrome',
@@ -25,25 +26,36 @@ function findChromeExecutable() {
     '/usr/bin/chromium-browser',
   ].filter(Boolean);
 
-  const executablePath = candidates.find(p => fs.existsSync(p));
-  if (!executablePath) {
-    throw new Error('找不到 Chrome/Edge 浏览器，请先安装 Chrome，或设置 CHROME_PATH 环境变量');
-  }
-  return executablePath;
+  return candidates.find(p => fs.existsSync(p)) || null;
 }
 
-// 启动浏览器（使用系统 Chrome，无需单独下载）
+// 启动浏览器：优先使用系统 Chrome/Edge；找不到时尝试 Puppeteer 自带浏览器。
 async function launchBrowser() {
   const executablePath = findChromeExecutable();
   const userDataDir = process.env.CHROME_USER_DATA_DIR || path.join(os.tmpdir(), `geo-publisher-browser-${Date.now()}-${process.pid}`);
   if (!fs.existsSync(userDataDir)) fs.mkdirSync(userDataDir, { recursive: true });
-  return puppeteer.launch({
-    executablePath,
+
+  const launchOptions = {
     userDataDir,
     headless: false,
     defaultViewport: null,
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--start-maximized'],
-  });
+  };
+
+  if (executablePath) {
+    return puppeteer.launch({ ...launchOptions, executablePath });
+  }
+
+  try {
+    puppeteer = require('puppeteer');
+    return puppeteer.launch(launchOptions);
+  } catch (error) {
+    throw new Error([
+      '找不到 Chrome/Edge 浏览器。',
+      '请安装 Chrome/Edge，或在 geo-publisher 目录运行 npm install 安装 Puppeteer 自带浏览器，或设置 CHROME_PATH 环境变量。',
+      `原始错误：${error.message}`,
+    ].join(' '));
+  }
 }
 
 // 保存 Cookie
