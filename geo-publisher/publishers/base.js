@@ -35,13 +35,20 @@ async function launchBrowser() {
   const executablePath = findChromeExecutable();
   const userDataDir = process.env.CHROME_USER_DATA_DIR || path.join(os.tmpdir(), `geo-publisher-browser-${Date.now()}-${process.pid}`);
   if (!fs.existsSync(userDataDir)) fs.mkdirSync(userDataDir, { recursive: true });
+  const isLinuxServer = process.platform === 'linux' && !process.env.DISPLAY;
 
   const launchOptions = {
     userDataDir,
-    headless: false,
-    defaultViewport: null,
+    headless: isLinuxServer ? 'new' : false,
+    defaultViewport: isLinuxServer ? { width: 1365, height: 900 } : null,
     protocolTimeout: 300000,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--start-maximized'],
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      ...(isLinuxServer ? ['--window-size=1365,900'] : ['--start-maximized']),
+    ],
   };
 
   if (executablePath) {
