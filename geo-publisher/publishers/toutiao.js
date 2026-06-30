@@ -44,6 +44,14 @@ async function withFreshSelector(page, selectors, action, timeout = 20000) {
   return true;
 }
 
+async function waitForPageStable(page, timeout = 8000) {
+  await Promise.race([
+    page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout }).catch(() => null),
+    page.waitForTimeout(Math.min(timeout, 2500)),
+  ]);
+  await page.waitForTimeout(1000);
+}
+
 async function getPageDebug(page) {
   const buttons = await page.evaluate(() =>
     [...document.querySelectorAll('button, a, [role="button"]')]
@@ -346,11 +354,20 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
       addLog('检测到未登录，尝试加载 Cookie...');
       const hasCookies = await loadCookies(page, cookiePath);
       if (hasCookies) {
-        await page.reload({ waitUntil: 'domcontentloaded' });
-        await page.waitForTimeout(2000);
+        await Promise.allSettled([
+          page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }),
+          page.reload({ waitUntil: 'domcontentloaded' }),
+        ]);
+        await waitForPageStable(page, 6000);
       }
 
-      const stillNeedLogin = await page.$('input[name="mobile"], [class*="login-form"]');
+      const stillNeedLogin = await page.$('input[name="mobile"], [class*="login-form"]').catch(async (error) => {
+        if (/Execution context|context was destroyed|Cannot find context/i.test(error.message || '')) {
+          await waitForPageStable(page, 8000);
+          return page.$('input[name="mobile"], [class*="login-form"]').catch(() => null);
+        }
+        throw error;
+      });
       if (stillNeedLogin) {
         addLog('Cookie 无效，需要手动登录头条号...');
         await page.goto('https://mp.toutiao.com/auth/page/login', { waitUntil: 'domcontentloaded' });

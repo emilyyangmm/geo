@@ -59,6 +59,40 @@ async function dismissSohuTips(page, addLog) {
 }
 
 async function clickSohuFinalPublish(page, addLog) {
+  const findBottomPublishButton = async () => page.evaluate(() => {
+    const isVisible = (node) => {
+      const style = window.getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 20 && rect.height > 20;
+    };
+    const isYellow = (color) => /rgb\(\s*25[0-5]\s*,\s*(1[6-9]\d|2[0-4]\d|25[0-5])\s*,\s*0?\d{1,2}\s*\)/.test(color || '');
+    const candidates = [...document.querySelectorAll('button, a, div, span, [role="button"]')]
+      .filter(isVisible)
+      .map(node => {
+        const rect = node.getBoundingClientRect();
+        const style = window.getComputedStyle(node);
+        const text = (node.innerText || node.textContent || '').replace(/\s+/g, '');
+        return {
+          text,
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+          top: rect.top,
+          width: rect.width,
+          height: rect.height,
+          bottomish: rect.top > window.innerHeight * 0.62,
+          yellow: isYellow(style.backgroundColor),
+          disabled: node.disabled || node.getAttribute('aria-disabled') === 'true' || String(node.className || '').includes('disabled'),
+        };
+      })
+      .filter(item => item.text === '发布' && !item.disabled)
+      .sort((a, b) => {
+        if (a.yellow !== b.yellow) return a.yellow ? -1 : 1;
+        if (a.bottomish !== b.bottomish) return a.bottomish ? -1 : 1;
+        return b.top - a.top;
+      });
+    return candidates[0] || null;
+  }).catch(() => null);
+
   const clickButtonByText = async (texts) => page.evaluate((wantedTexts) => {
     const isVisible = (node) => {
       const style = window.getComputedStyle(node);
@@ -89,7 +123,14 @@ async function clickSohuFinalPublish(page, addLog) {
   await dismissSohuTips(page, addLog);
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
   await page.waitForTimeout(600);
-  let clicked = await clickButtonByText(['发布']);
+  let clicked = await findBottomPublishButton();
+  if (clicked) {
+    await page.mouse.click(clicked.x, clicked.y).catch(() => {});
+    clicked = { text: `底部发布按钮@${Math.round(clicked.x)},${Math.round(clicked.y)}` };
+  }
+  if (!clicked) {
+    clicked = await clickButtonByText(['发布']);
+  }
   if (!clicked) {
     const fallback = await page.evaluate(() => {
       const isVisible = (node) => {
@@ -120,9 +161,9 @@ async function clickSohuFinalPublish(page, addLog) {
       await page.mouse.click(fallback.x, fallback.y).catch(() => {});
       clicked = { text: `发布按钮坐标兜底@${Math.round(fallback.x)},${Math.round(fallback.y)}` };
     } else {
-      const viewport = page.viewport() || { width: 1365, height: 768 };
+      const viewport = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight })).catch(() => page.viewport() || { width: 1365, height: 768 });
       const x = Math.max(120, Math.round(viewport.width * 0.12));
-      const y = Math.max(120, Math.round(viewport.height - 45));
+      const y = Math.max(120, Math.round(viewport.height - 55));
       await page.mouse.click(x, y).catch(() => {});
       clicked = { text: `发布按钮固定兜底@${x},${y}` };
     }
