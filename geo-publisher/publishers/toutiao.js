@@ -323,19 +323,24 @@ async function clickFinalToutiaoPublish(page, addLog) {
     addLog(`已点击二次确认按钮：${confirmClicked}`);
     await Promise.race([
       page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 8000 }).catch(() => null),
-      page.waitForTimeout(3000),
+      page.waitForTimeout(6000),
     ]);
   }
+  await page.waitForTimeout(3000);
 
   const result = await page.evaluate(() => {
     const text = document.body.innerText || '';
-    if (/发布成功|发表成功|提交成功|审核中|已发布/.test(text)) return 'success-text';
-    if (/认证|实名认证|未完成|失败|错误|请选择|请上传|不能为空/.test(text)) return 'blocked';
+    if (/发布成功|发表成功|提交成功|提交审核|审核中|已发布/.test(text)) return 'success-text';
+    if (/草稿保存中|草稿|认证|实名认证|未完成|失败|错误|请选择|请上传|不能为空|不符合|违规|修改后/.test(text)) return 'blocked';
     return 'unknown';
   }).catch(() => 'unknown');
 
   if (result === 'success-text') return { ok: true, url: page.url() };
-  if (!page.url().includes('/graphic/publish')) return { ok: true, url: page.url() };
+  const afterText = await page.evaluate(() => (document.body.innerText || '').replace(/\s+/g, ' ').slice(0, 300)).catch(() => '');
+  if (afterText) addLog(`头条发布后页面快照：${afterText}`);
+  if (!page.url().includes('/graphic/publish') && !/草稿|发布|预览|标题|正文/.test(afterText)) {
+    return { ok: true, url: page.url() };
+  }
   return { ok: false, reason: result === 'blocked' ? '页面提示仍需补充资料/认证' : '未检测到发布成功提示' };
 }
 
