@@ -366,7 +366,7 @@ async function handleToutiaoPostClickDialogs(page, addLog) {
     target.click();
     return (target.innerText || target.textContent || '').trim();
   });
-  if (confirmClicked && confirmClicked !== clicked) {
+  if (confirmClicked) {
     addLog(`已点击二次确认按钮：${confirmClicked}`);
     await Promise.race([
       page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 8000 }).catch(() => null),
