@@ -284,19 +284,7 @@ async function clickFinalToutiaoPublish(page, addLog) {
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await page.waitForTimeout(500);
 
-  const clicked = await page.evaluate(() => {
-    const nodes = [...document.querySelectorAll('button, [role="button"], a')];
-    const candidates = nodes.filter(node => {
-      const text = (node.innerText || node.textContent || '').replace(/\s+/g, '');
-      const disabled = node.disabled || node.getAttribute('aria-disabled') === 'true' || node.className?.toString().includes('disabled');
-      return !disabled && ['发布', '确认发布', '发表', '提交发布'].some(t => text === t || text.includes(t));
-    });
-    const target = candidates[candidates.length - 1];
-    if (!target) return '';
-    target.scrollIntoView({ block: 'center' });
-    target.click();
-    return (target.innerText || target.textContent || '').trim();
-  });
+  const clicked = await clickToutiaoPublishButton(page);
 
   if (!clicked) return { ok: false, reason: '未找到可点击的发布按钮' };
   addLog(`已点击按钮：${clicked}`);
@@ -306,6 +294,65 @@ async function clickFinalToutiaoPublish(page, addLog) {
   ]);
 
   await page.waitForTimeout(2000);
+  await handleToutiaoPostClickDialogs(page, addLog);
+
+  const stillOnPublish = await page.evaluate(() => /预览并发布|发布更多收益|草稿保存中/.test(document.body.innerText || '')).catch(() => false);
+  if (stillOnPublish && page.url().includes('/graphic/publish')) {
+    addLog('头条授权弹窗处理后仍在发布页，重新点击预览并发布...');
+    const retryClicked = await clickToutiaoPublishButton(page);
+    if (retryClicked) {
+      addLog(`已再次点击按钮：${retryClicked}`);
+      await Promise.race([
+        page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 8000 }).catch(() => null),
+        page.waitForTimeout(4000),
+      ]);
+      await handleToutiaoPostClickDialogs(page, addLog);
+    }
+  }
+
+  await page.waitForTimeout(3000);
+
+  const result = await page.evaluate(() => {
+    const text = document.body.innerText || '';
+    if (/发布成功|发表成功|提交成功|提交审核|审核中|已发布/.test(text)) return 'success-text';
+    if (/草稿保存中|草稿|认证|实名认证|未完成|失败|错误|请选择|请上传|不能为空|不符合|违规|修改后/.test(text)) return 'blocked';
+    return 'unknown';
+  }).catch(() => 'unknown');
+
+  if (result === 'success-text') return { ok: true, url: page.url() };
+  const afterText = await page.evaluate(() => (document.body.innerText || '').replace(/\s+/g, ' ').slice(0, 300)).catch(() => '');
+  if (afterText) addLog(`头条发布后页面快照：${afterText}`);
+  if (!page.url().includes('/graphic/publish') && !/草稿|发布|预览|标题|正文/.test(afterText)) {
+    return { ok: true, url: page.url() };
+  }
+  return { ok: false, reason: result === 'blocked' ? '页面提示仍需补充资料/认证' : '未检测到发布成功提示' };
+}
+
+async function clickToutiaoPublishButton(page) {
+  return page.evaluate(() => {
+    const nodes = [...document.querySelectorAll('button, [role="button"], a')];
+    const candidates = nodes.filter(node => {
+      const text = (node.innerText || node.textContent || '').replace(/\s+/g, '');
+      const disabled = node.disabled || node.getAttribute('aria-disabled') === 'true' || node.className?.toString().includes('disabled');
+      if (text.includes('定时') || text.includes('取消')) return false;
+      return !disabled && ['预览并发布', '确认发布', '发布', '发表', '提交发布'].some(t => text === t || text.includes(t));
+    });
+    candidates.sort((a, b) => {
+      const ta = (a.innerText || a.textContent || '').replace(/\s+/g, '');
+      const tb = (b.innerText || b.textContent || '').replace(/\s+/g, '');
+      const sa = ta.includes('预览并发布') ? 3 : ta.includes('确认发布') ? 2 : ta === '发布' ? 1 : 0;
+      const sb = tb.includes('预览并发布') ? 3 : tb.includes('确认发布') ? 2 : tb === '发布' ? 1 : 0;
+      return sb - sa;
+    });
+    const target = candidates[0];
+    if (!target) return '';
+    target.scrollIntoView({ block: 'center' });
+    target.click();
+    return (target.innerText || target.textContent || '').trim();
+  });
+}
+
+async function handleToutiaoPostClickDialogs(page, addLog) {
   const confirmClicked = await page.evaluate(() => {
     const nodes = [...document.querySelectorAll('button, [role="button"], a')];
     const target = nodes.find(node => {
@@ -336,22 +383,6 @@ async function clickFinalToutiaoPublish(page, addLog) {
       page.waitForTimeout(5000),
     ]);
   }
-  await page.waitForTimeout(3000);
-
-  const result = await page.evaluate(() => {
-    const text = document.body.innerText || '';
-    if (/发布成功|发表成功|提交成功|提交审核|审核中|已发布/.test(text)) return 'success-text';
-    if (/草稿保存中|草稿|认证|实名认证|未完成|失败|错误|请选择|请上传|不能为空|不符合|违规|修改后/.test(text)) return 'blocked';
-    return 'unknown';
-  }).catch(() => 'unknown');
-
-  if (result === 'success-text') return { ok: true, url: page.url() };
-  const afterText = await page.evaluate(() => (document.body.innerText || '').replace(/\s+/g, ' ').slice(0, 300)).catch(() => '');
-  if (afterText) addLog(`头条发布后页面快照：${afterText}`);
-  if (!page.url().includes('/graphic/publish') && !/草稿|发布|预览|标题|正文/.test(afterText)) {
-    return { ok: true, url: page.url() };
-  }
-  return { ok: false, reason: result === 'blocked' ? '页面提示仍需补充资料/认证' : '未检测到发布成功提示' };
 }
 
 async function clickToutiaoModalConfirm(page) {
