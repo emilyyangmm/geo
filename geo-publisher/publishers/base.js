@@ -39,6 +39,7 @@ async function launchBrowser() {
     userDataDir,
     headless: false,
     defaultViewport: null,
+    protocolTimeout: 300000,
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--start-maximized'],
   };
 

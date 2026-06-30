@@ -507,11 +507,17 @@ async function publishFixed({ title, content, summary, tags, creds, cookiePath, 
     await dismissSohuTips(page, addLog);
     addLog('填写标题...');
     await page.waitForSelector('input[placeholder*="标题"], textarea[placeholder*="标题"], input.article-title-input, .title-input', { timeout: 20000 });
-    const titleEl = await page.$('input[placeholder*="标题"], textarea[placeholder*="标题"], input.article-title-input, .title-input');
-    if (!titleEl) throw new Error('没有找到搜狐标题框');
-    await titleEl.click({ clickCount: 3 });
-    await page.keyboard.press('Backspace').catch(() => {});
-    await titleEl.type(title, { delay: 30 });
+    const titleFilled = await page.evaluate((value) => {
+      const el = document.querySelector('input[placeholder*="标题"], textarea[placeholder*="标题"], input.article-title-input, .title-input');
+      if (!el) return false;
+      el.focus();
+      el.value = value;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    }, title).catch(() => false);
+    if (!titleFilled) throw new Error('没有找到搜狐标题框');
+    addLog(`标题已填写：${title}`);
 
     addLog('填写正文...');
     await dismissSohuTips(page, addLog);
