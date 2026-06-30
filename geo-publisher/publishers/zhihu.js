@@ -100,6 +100,7 @@ function setClipboardText(text) {
 }
 
 async function pasteText(page, text) {
+  let copied = false;
   try {
     await page.browser().defaultBrowserContext().overridePermissions('https://zhuanlan.zhihu.com', [
       'clipboard-read',
@@ -108,12 +109,21 @@ async function pasteText(page, text) {
     await page.evaluate(async value => {
       await navigator.clipboard.writeText(value);
     }, text);
-  } catch {
+    copied = true;
+  } catch {}
+
+  if (!copied && process.platform === 'win32') {
     await setClipboardText(text);
   }
-  await page.keyboard.down('Control');
-  await page.keyboard.press('KeyV');
-  await page.keyboard.up('Control');
+
+  if (copied || process.platform === 'win32') {
+    await page.keyboard.down('Control');
+    await page.keyboard.press('KeyV');
+    await page.keyboard.up('Control');
+    return;
+  }
+
+  await page.keyboard.type(text, { delay: 1 });
 }
 
 async function clickZhihuPublish(page) {

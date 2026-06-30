@@ -42,6 +42,7 @@ async function findInFrames(page, selectors) {
 
 function setClipboardText(text) {
   return new Promise((resolve, reject) => {
+    if (process.platform !== 'win32') return resolve(false);
     const tmpPath = path.join(os.tmpdir(), `geo-baijiahao-${Date.now()}.txt`);
     fs.writeFileSync(tmpPath, text, 'utf8');
     const ps = spawn('powershell.exe', [
@@ -58,18 +59,22 @@ function setClipboardText(text) {
     ps.on('error', reject);
     ps.on('close', code => {
       try { fs.unlinkSync(tmpPath); } catch {}
-      if (code === 0) resolve();
+      if (code === 0) resolve(true);
       else reject(new Error(error || `Set-Clipboard failed with code ${code}`));
     });
   });
 }
 
 async function pastePlainText(frame, page, text) {
-  await setClipboardText(text);
+  const copied = await setClipboardText(text);
   await frame.evaluate(() => window.focus()).catch(() => {});
-  await page.keyboard.down('Control');
-  await page.keyboard.press('KeyV');
-  await page.keyboard.up('Control');
+  if (copied) {
+    await page.keyboard.down('Control');
+    await page.keyboard.press('KeyV');
+    await page.keyboard.up('Control');
+  } else {
+    await page.keyboard.type(text, { delay: 1 });
+  }
 }
 
 async function clickByText(page, texts) {
@@ -907,14 +912,18 @@ async function fillBaijiahaoTitleAndBody(page, title, content, addLog) {
   if (!bodyClicked) throw new Error('没有找到百家号正文输入位置');
   await page.waitForTimeout(300);
   const plainText = content.replace(/#{1,6}\s/g, '\n\n').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').trim();
-  await setClipboardText(plainText);
+  const copied = await setClipboardText(plainText);
   await page.keyboard.down('Control');
   await page.keyboard.press('KeyA');
   await page.keyboard.up('Control');
   await page.keyboard.press('Backspace');
-  await page.keyboard.down('Control');
-  await page.keyboard.press('KeyV');
-  await page.keyboard.up('Control');
+  if (copied) {
+    await page.keyboard.down('Control');
+    await page.keyboard.press('KeyV');
+    await page.keyboard.up('Control');
+  } else {
+    await page.keyboard.type(plainText, { delay: 1 });
+  }
   await page.waitForTimeout(1000);
 
   const verify = await page.evaluate((expectedTitle) => {
@@ -1114,14 +1123,18 @@ async function fillBaijiahaoTitleAndBodyV2(page, title, content, addLog) {
   const plainText = content.replace(/#{1,6}\s/g, '\n\n').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').trim();
   const bodyClicked = await clickBaijiahaoBodyArea(page);
   if (!bodyClicked) throw new Error('没有找到百家号正文点击区域');
-  await setClipboardText(plainText);
+  const copied = await setClipboardText(plainText);
   await page.keyboard.down('Control');
   await page.keyboard.press('KeyA');
   await page.keyboard.up('Control');
   await page.keyboard.press('Backspace');
-  await page.keyboard.down('Control');
-  await page.keyboard.press('KeyV');
-  await page.keyboard.up('Control');
+  if (copied) {
+    await page.keyboard.down('Control');
+    await page.keyboard.press('KeyV');
+    await page.keyboard.up('Control');
+  } else {
+    await page.keyboard.type(plainText, { delay: 1 });
+  }
   await page.waitForTimeout(800);
   let bodyWritten = await bodyFrame.evaluate((expectedBodyStart) => {
     const text = (document.body.innerText || '').replace(/\s+/g, '');
