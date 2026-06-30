@@ -326,6 +326,16 @@ async function clickFinalToutiaoPublish(page, addLog) {
       page.waitForTimeout(6000),
     ]);
   }
+
+  for (let i = 0; i < 3; i++) {
+    const modalClicked = await clickToutiaoModalConfirm(page).catch(() => '');
+    if (!modalClicked) break;
+    addLog(`已点击头条弹窗按钮：${modalClicked}`);
+    await Promise.race([
+      page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 8000 }).catch(() => null),
+      page.waitForTimeout(5000),
+    ]);
+  }
   await page.waitForTimeout(3000);
 
   const result = await page.evaluate(() => {
@@ -342,6 +352,44 @@ async function clickFinalToutiaoPublish(page, addLog) {
     return { ok: true, url: page.url() };
   }
   return { ok: false, reason: result === 'blocked' ? '页面提示仍需补充资料/认证' : '未检测到发布成功提示' };
+}
+
+async function clickToutiaoModalConfirm(page) {
+  return page.evaluate(() => {
+    function isVisible(el) {
+      const rect = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+    }
+
+    const containers = [...document.querySelectorAll('[role="dialog"], [class*="modal"], [class*="Modal"], [class*="dialog"], [class*="Dialog"]')]
+      .filter(isVisible)
+      .sort((a, b) => {
+        const ar = a.getBoundingClientRect();
+        const br = b.getBoundingClientRect();
+        return (br.width * br.height) - (ar.width * ar.height);
+      });
+    const dialog = containers.find(el => /作品同步授权|确认|授权|发布/.test(el.innerText || el.textContent || ''));
+    if (!dialog) return '';
+
+    const buttons = [...dialog.querySelectorAll('button, [role="button"], a, span, div')]
+      .filter(isVisible)
+      .map(el => ({
+        el,
+        text: (el.innerText || el.textContent || '').replace(/\s+/g, ''),
+        rect: el.getBoundingClientRect(),
+        cls: String(el.className || ''),
+      }))
+      .filter(item => item.text && !/取消|关闭|稍后/.test(item.text));
+
+    const target = buttons
+      .filter(item => /确定|确认|同意|授权|继续|发布/.test(item.text))
+      .sort((a, b) => (b.rect.top - a.rect.top) || (b.rect.left - a.rect.left))[0];
+    if (!target) return '';
+    target.el.scrollIntoView({ block: 'center' });
+    target.el.click();
+    return target.text;
+  });
 }
 
 async function publish({ title, content, summary, tags, creds, cookiePath, addLog }) {
