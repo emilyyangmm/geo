@@ -25,6 +25,8 @@ app.use(express.json({ limit: '20mb' }));
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 const COOKIES_DIR = path.join(__dirname, 'cookies');
 const SITE_ROOT = path.resolve(__dirname, '..');
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://nhpelzwccvqdcstbxwvf.supabase.co';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_NBXXIzCYMR-2GWgMjB1Z3A_lAGU84py';
 const MANUAL_LOGIN_PLATFORMS = new Set(['zhihu', 'toutiao', 'baijiahao', 'sohu']);
 const COOKIE_DOMAINS = {
   zhihu: '.zhihu.com',
@@ -45,29 +47,71 @@ function enqueuePublish(task) {
   return publishQueue;
 }
 
-// ===================== 配置管理 =====================
-function loadConfig() {
+function safeUserId(userId) {
+  return String(userId || 'anonymous').replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+function getUserDir(userId) {
+  const dir = path.join(COOKIES_DIR, safeUserId(userId));
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function getUserConfigPath(userId) {
+  return path.join(getUserDir(userId), 'config.json');
+}
+
+async function getSupabaseUser(req) {
+  const auth = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (!token) return null;
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!response.ok) return null;
+  return response.json();
+}
+
+async function requireUser(req, res, next) {
   try {
-    return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    const user = await getSupabaseUser(req);
+    if (!user?.id) return res.status(401).json({ error: '请先登录 GEO Studio' });
+    req.user = user;
+    next();
+  } catch (error) {
+    res.status(401).json({ error: '登录状态校验失败，请重新登录' });
+  }
+}
+
+// ===================== 配置管理 =====================
+function loadConfig(configPath = CONFIG_PATH) {
+  try {
+    return JSON.parse(fs.readFileSync(configPath, 'utf8'));
   } catch {
     return { platforms: {} };
   }
 }
 
-function saveConfig(config) {
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+function saveConfig(config, configPath = CONFIG_PATH) {
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 }
 
 // ===================== 健康检查 =====================
-app.get('/api/status', (req, res) => {
-  const config = loadConfig();
+app.get('/api/status', async (req, res) => {
+  const user = await getSupabaseUser(req).catch(() => null);
+  if (!user?.id) return res.json({ ok: true, configured: [], auth: false });
+  const baseDir = getUserDir(user.id);
+  const config = loadConfig(getUserConfigPath(user.id));
   const configured = new Set(Object.keys(config.platforms || {}).filter(
     p => config.platforms[p]?.username || config.platforms[p]?.appId
   ));
   for (const platform of Object.keys(COOKIE_DOMAINS)) {
-    if (fs.existsSync(path.join(COOKIES_DIR, `${platform}.json`))) configured.add(platform);
+    if (fs.existsSync(path.join(baseDir, `${platform}.json`))) configured.add(platform);
   }
-  res.json({ ok: true, configured: [...configured] });
+  res.json({ ok: true, configured: [...configured], auth: true, email: user.email || '' });
 });
 
 // ===================== 简易 Cookie 导入页面 =====================
@@ -155,8 +199,8 @@ app.use('/pdd商品图', express.static(path.join(SITE_ROOT, 'pdd商品图')));
 app.use('/assets', express.static(path.join(SITE_ROOT, 'assets')));
 
 // ===================== 获取配置（脱敏） =====================
-app.get('/api/config', (req, res) => {
-  const config = loadConfig();
+app.get('/api/config', requireUser, (req, res) => {
+  const config = loadConfig(getUserConfigPath(req.user.id));
   const safe = { platforms: {} };
   for (const [p, creds] of Object.entries(config.platforms || {})) {
     safe.platforms[p] = {
@@ -169,8 +213,9 @@ app.get('/api/config', (req, res) => {
 });
 
 // ===================== 保存配置 =====================
-app.post('/api/config', (req, res) => {
-  const config = loadConfig();
+app.post('/api/config', requireUser, (req, res) => {
+  const configPath = getUserConfigPath(req.user.id);
+  const config = loadConfig(configPath);
   const incoming = req.body.platforms || {};
 
   for (const [platform, creds] of Object.entries(incoming)) {
@@ -183,13 +228,13 @@ app.post('/api/config', (req, res) => {
     config.platforms[platform] = { ...existing, ...creds, password, appSecret };
   }
 
-  saveConfig(config);
+  saveConfig(config, configPath);
   res.json({ success: true });
 });
 
 // ===================== 清除某平台 Cookie（强制重新登录） =====================
-app.delete('/api/cookies/:platform', (req, res) => {
-  const cookiePath = path.join(COOKIES_DIR, `${req.params.platform}.json`);
+app.delete('/api/cookies/:platform', requireUser, (req, res) => {
+  const cookiePath = path.join(getUserDir(req.user.id), `${req.params.platform}.json`);
   if (fs.existsSync(cookiePath)) fs.unlinkSync(cookiePath);
   res.json({ success: true });
 });
@@ -238,7 +283,7 @@ function parseCookieInput(raw, fallbackDomain) {
 }
 
 // ===================== 手动导入 Cookie =====================
-app.post('/api/cookies/:platform/import', (req, res) => {
+app.post('/api/cookies/:platform/import', requireUser, (req, res) => {
   const platform = req.params.platform;
   const domain = COOKIE_DOMAINS[platform];
   if (!domain) return res.status(400).json({ error: `不支持导入 Cookie 的平台: ${platform}` });
@@ -257,14 +302,14 @@ app.post('/api/cookies/:platform/import', (req, res) => {
     }
   }
 
-  fs.writeFileSync(path.join(COOKIES_DIR, `${platform}.json`), JSON.stringify(cookies, null, 2));
+  fs.writeFileSync(path.join(getUserDir(req.user.id), `${platform}.json`), JSON.stringify(cookies, null, 2));
   res.json({ success: true, count: cookies.length });
 });
 
 // ===================== 单平台发布 =====================
-app.post('/api/publish', async (req, res) => {
+app.post('/api/publish', requireUser, async (req, res) => {
   const { platform, title, content, summary = '', tags = [] } = req.body;
-  const config = loadConfig();
+  const config = loadConfig(getUserConfigPath(req.user.id));
   const creds = config.platforms?.[platform] || {};
 
   if (!MANUAL_LOGIN_PLATFORMS.has(platform) && !creds.username && !creds.appId) {
@@ -272,7 +317,7 @@ app.post('/api/publish', async (req, res) => {
   }
 
   const jobId = uuidv4();
-  jobs[jobId] = { status: 'running', platform, title, log: [] };
+  jobs[jobId] = { status: 'running', platform, title, userId: req.user.id, log: [] };
 
   // 异步执行；发布浏览器串行启动，避免多个 Chrome 抢同一个用户目录
   enqueuePublish(async () => {
@@ -287,7 +332,7 @@ app.post('/api/publish', async (req, res) => {
 
       delete require.cache[require.resolve(publisherPath)];
       const publisher = require(publisherPath);
-      const cookiePath = path.join(COOKIES_DIR, `${platform}.json`);
+      const cookiePath = path.join(getUserDir(req.user.id), `${platform}.json`);
 
       const result = await publisher.publish({
         title, content, summary, tags, creds,
@@ -313,7 +358,7 @@ app.post('/api/publish', async (req, res) => {
 });
 
 // ===================== 批量发布 =====================
-app.post('/api/publish/batch', async (req, res) => {
+app.post('/api/publish/batch', requireUser, async (req, res) => {
   const { platforms, title, content, summary = '', tags = [] } = req.body;
   const jobIds = {};
 

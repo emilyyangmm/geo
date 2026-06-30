@@ -61,6 +61,18 @@
   }
   .logo-sub { margin-top: 2px; font-size: 12px; color: var(--muted); font-weight: 500; }
   .header-right { display: flex; align-items: center; gap: 12px; }
+  .auth-panel { display: flex; align-items: center; gap: 8px; }
+  .auth-input {
+    width: 150px;
+    min-height: 34px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: rgba(255,255,255,.72);
+    color: var(--ink);
+    padding: 0 12px;
+    font-size: 12px;
+  }
+  .auth-user { max-width: 160px; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .api-status {
     display: flex;
     align-items: center;
@@ -334,6 +346,14 @@
     </div>
   </div>
   <div class="header-right">
+    <div class="auth-panel">
+      <span class="auth-user" id="authUserText">未登录</span>
+      <input class="auth-input" id="authEmail" type="email" placeholder="邮箱">
+      <input class="auth-input" id="authPassword" type="password" placeholder="密码">
+      <button class="btn btn-sm" onclick="signIn()">登录</button>
+      <button class="btn btn-sm" onclick="signUp()">注册</button>
+      <button class="btn btn-sm" id="signOutBtn" onclick="signOut()" style="display:none">退出</button>
+    </div>
     <div class="api-status">
       <div class="status-dot" id="apiDot"></div>
       <span id="apiStatusText">未配置 API Key</span>
@@ -870,8 +890,13 @@
   </main>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 // ===================== State =====================
+const SUPABASE_URL = 'https://nhpelzwccvqdcstbxwvf.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_NBXXIzCYMR-2GWgMjB1Z3A_lAGU84py';
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
 const DEFAULT_API_CONFIG = {
   provider: 'custom',
   baseUrl: 'https://apihub.agnes-ai.com/v1',
@@ -890,6 +915,8 @@ const state = {
   articles: [],
   history: [],
   currentFilter: 'all',
+  user: null,
+  accessToken: '',
 };
 
 const TYPE_LABELS = {
@@ -912,6 +939,74 @@ function escapeHTML(value) {
 
 function safeType(value) {
   return String(value || 'category').replace(/[^a-z_-]/gi, '') || 'category';
+}
+
+function authHeaders(extra = {}) {
+  const headers = { ...extra };
+  if (state.accessToken) headers.Authorization = `Bearer ${state.accessToken}`;
+  if (state.user?.id) headers['X-GEO-User-Id'] = state.user.id;
+  return headers;
+}
+
+function requireLogin() {
+  if (state.user && state.accessToken) return true;
+  alert('请先登录。公司同事登录后，Cookie 会按个人账号分开保存，不会互相覆盖。');
+  return false;
+}
+
+function renderAuthState() {
+  const userText = document.getElementById('authUserText');
+  const emailInput = document.getElementById('authEmail');
+  const pwdInput = document.getElementById('authPassword');
+  const outBtn = document.getElementById('signOutBtn');
+  if (!userText) return;
+  if (state.user) {
+    userText.textContent = state.user.email || state.user.id;
+    emailInput.style.display = 'none';
+    pwdInput.style.display = 'none';
+    outBtn.style.display = '';
+  } else {
+    userText.textContent = '未登录';
+    emailInput.style.display = '';
+    pwdInput.style.display = '';
+    outBtn.style.display = 'none';
+  }
+}
+
+async function refreshSession() {
+  const { data } = await supabaseClient.auth.getSession();
+  state.user = data.session?.user || null;
+  state.accessToken = data.session?.access_token || '';
+  renderAuthState();
+  await checkServer();
+  if (state.user) await loadCredentialsFromServer();
+}
+
+async function signIn() {
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  if (!email || !password) return alert('请输入邮箱和密码');
+  const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  if (error) return alert('登录失败：' + error.message);
+  await refreshSession();
+}
+
+async function signUp() {
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  if (!email || !password) return alert('请输入邮箱和密码，密码至少 6 位');
+  const { error } = await supabaseClient.auth.signUp({ email, password });
+  if (error) return alert('注册失败：' + error.message);
+  alert('注册成功。如果 Supabase 要求邮箱验证，请先去邮箱点确认链接，再回来登录。');
+  await refreshSession();
+}
+
+async function signOut() {
+  await supabaseClient.auth.signOut();
+  state.user = null;
+  state.accessToken = '';
+  renderAuthState();
+  await checkServer();
 }
 
 function clampPercent(value) {
@@ -1617,7 +1712,7 @@ async function checkServer() {
   const dot = document.getElementById('serverDot');
   const txt = document.getElementById('serverStatusText');
   try {
-    const res = await fetchWithTimeout(SERVER + '/api/status');
+    const res = await fetchWithTimeout(SERVER + '/api/status', { headers: authHeaders() });
     const data = await res.json();
     dot.classList.add('ok');
     const configured = data.configured || [];
@@ -1632,7 +1727,8 @@ async function checkServer() {
 // 从服务端加载凭证状态（脱敏展示）
 async function loadCredentialsFromServer() {
   try {
-    const res = await fetch(SERVER + '/api/config');
+    if (!state.user) return;
+    const res = await fetch(SERVER + '/api/config', { headers: authHeaders() });
     const data = await res.json();
     const platforms = data.platforms || {};
     const map = { zhihu: 'zhihu', toutiao: 'toutiao', baijiahao: 'baijiahao', sohu: 'sohu', wechat: 'wechat' };
@@ -1653,6 +1749,7 @@ async function loadCredentialsFromServer() {
 
 // 保存凭证到发布服务
 async function saveCredentials() {
+  if (!requireLogin()) return;
   const platforms = {};
   document.querySelectorAll('.platform-cred-row').forEach(row => {
     const p = row.dataset.platform;
@@ -1669,7 +1766,7 @@ async function saveCredentials() {
   try {
     const res = await fetch(SERVER + '/api/config', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ platforms }),
     });
     const data = await res.json();
@@ -1684,6 +1781,7 @@ async function saveCredentials() {
 }
 
 async function importCookie(platform, cookie) {
+  if (!requireLogin()) return;
   if (!cookie || !cookie.trim()) {
     alert('请先粘贴 Cookie');
     return;
@@ -1692,7 +1790,7 @@ async function importCookie(platform, cookie) {
   try {
     const res = await fetch(SERVER + '/api/cookies/' + platform + '/import', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ cookie }),
     });
     const text = await res.text();
@@ -1721,10 +1819,11 @@ async function saveRowCookie(platform) {
 
 // 清除 Cookie 缓存
 async function clearCookies() {
+  if (!requireLogin()) return;
   const platforms = ['zhihu', 'toutiao', 'baijiahao', 'sohu'];
   if (!confirm(`将清除所有平台的登录缓存（${platforms.join(', ')}），下次发布需重新登录，确认吗？`)) return;
   try {
-    await Promise.all(platforms.map(p => fetch(SERVER + '/api/cookies/' + p, { method: 'DELETE' })));
+    await Promise.all(platforms.map(p => fetch(SERVER + '/api/cookies/' + p, { method: 'DELETE', headers: authHeaders() })));
     alert('✅ 登录缓存已清除');
     platforms.forEach(p => setPlatformConfigured(p, false));
     await checkServer();
@@ -1768,6 +1867,7 @@ function getSelectedPlatforms() {
 
 // 发布单篇文章到所有选中平台
 async function publishSingle(idx) {
+  if (!requireLogin()) return;
   const done = state.articles.filter(a => a.status === 'done');
   const art = done[idx];
   if (!art) return;
@@ -1799,7 +1899,7 @@ async function publishSingle(idx) {
     try {
       const res = await fetch(SERVER + '/api/publish', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           platform,
           title: art.title,
@@ -1838,7 +1938,7 @@ async function pollJob(jobId, addToLog) {
   for (let i = 0; i < 210; i++) {
     await new Promise(r => setTimeout(r, 2000));
     try {
-      const res = await fetch(SERVER + '/api/job/' + jobId);
+      const res = await fetch(SERVER + '/api/job/' + jobId, { headers: authHeaders() });
       const job = await res.json();
 
       // 输出新日志
@@ -1860,6 +1960,7 @@ async function pollJob(jobId, addToLog) {
 
 // 一键发布全部文章
 async function publishAll() {
+  if (!requireLogin()) return;
   const done = state.articles.filter(a => a.status === 'done');
   if (!done.length) { alert('没有可发布的文章'); return; }
   const platforms = getSelectedPlatforms();
@@ -1873,7 +1974,12 @@ async function publishAll() {
 
 // 页面加载时自动检测服务
 loadArticleHistory();
-setTimeout(checkServer, 1000);
+supabaseClient.auth.onAuthStateChange((_event, session) => {
+  state.user = session?.user || null;
+  state.accessToken = session?.access_token || '';
+  renderAuthState();
+});
+setTimeout(refreshSession, 500);
 </script>
 </body>
 </html>
