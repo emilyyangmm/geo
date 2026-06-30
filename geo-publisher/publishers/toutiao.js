@@ -25,6 +25,25 @@ async function waitForAnySelector(page, selectors, timeout = 20000) {
   return null;
 }
 
+async function withFreshSelector(page, selectors, action, timeout = 20000) {
+  const found = await waitForAnySelector(page, selectors, timeout);
+  if (!found) return false;
+  try {
+    await action(found.frame, found.selector);
+    return true;
+  } catch (error) {
+    if (!/context|detached|Execution context|Cannot find context/i.test(error.message || '')) {
+      throw error;
+    }
+  }
+
+  await page.waitForTimeout(1000);
+  const retry = await waitForAnySelector(page, selectors, Math.min(timeout, 8000));
+  if (!retry) return false;
+  await action(retry.frame, retry.selector);
+  return true;
+}
+
 async function getPageDebug(page) {
   const buttons = await page.evaluate(() =>
     [...document.querySelectorAll('button, a, [role="button"]')]
@@ -358,8 +377,8 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
 
     // 等待编辑器加载
     addLog('等待编辑器加载...');
-    const titleInput = await waitForAnySelector(page, TOUTIAO_TITLE_SELECTORS, 20000);
-    if (!titleInput) {
+    const titleReady = await waitForAnySelector(page, TOUTIAO_TITLE_SELECTORS, 20000);
+    if (!titleReady) {
       addLog(`没有找到头条标题框，当前页面可能是草稿箱/首页：${page.url()}`);
       addLog(await getPageDebug(page));
       addLog('请在弹出的浏览器里手动进入“发文章/发布文章”页，窗口会保留 5 分钟');
@@ -369,11 +388,14 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
 
     // 填写标题
     addLog('填写标题...');
-    await titleInput.handle.click({ clickCount: 3 });
-    await page.keyboard.down('Control');
-    await page.keyboard.press('KeyA');
-    await page.keyboard.up('Control');
-    await page.keyboard.type(title, { delay: 30 });
+    const titleFilled = await withFreshSelector(page, TOUTIAO_TITLE_SELECTORS, async (frame, selector) => {
+      await frame.click(selector, { clickCount: 3 });
+      await page.keyboard.down('Control');
+      await page.keyboard.press('KeyA');
+      await page.keyboard.up('Control');
+      await page.keyboard.type(title, { delay: 30 });
+    }, 12000);
+    if (!titleFilled) throw new Error('头条标题框加载后又失效，未能填写标题');
 
     await page.waitForTimeout(500);
 
@@ -382,19 +404,19 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
     const editorFrame = page.frames().find(f => f.url().includes('edit')) || page;
 
     // 尝试找到编辑区域
-    const editor = await waitForAnySelector(page, [
+    const editorSelectors = [
       '.public-DraftEditor-content',
       '.ProseMirror',
       '.ql-editor',
       '[contenteditable="true"]',
-    ], 10000);
-    if (editor) {
-      await editor.handle.click();
+    ];
+    const plainText = content.replace(/#{1,6}\s/g, '\n\n').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').trim();
+    const editorFilled = await withFreshSelector(page, editorSelectors, async (frame, selector) => {
+      await frame.click(selector);
       await page.waitForTimeout(300);
-      // 用纯文本填充
-      const plainText = content.replace(/#{1,6}\s/g, '\n\n').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').trim();
       await pastePlainText(page, plainText);
-    } else {
+    }, 12000);
+    if (!editorFilled) {
       addLog(`没有找到头条正文编辑框，当前页面：${page.url()}`);
       addLog(await getPageDebug(page));
       await waitForManualAction(addLog, '等待手动处理头条正文', 300000);
