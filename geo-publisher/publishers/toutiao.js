@@ -348,8 +348,9 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
     await page.goto('https://mp.toutiao.com/profile_v4/graphic/publish', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2000);
 
-    // 检查是否需要登录
-    const needLogin = await page.$('input[name="mobile"], .login-page, [class*="login"]');
+    // 检查是否需要登录。头条有时先跳到登录 URL，但登录框稍后才渲染。
+    const needLogin = page.url().includes('/auth/page/login') ||
+      await page.$('input[name="mobile"], .login-page, [class*="login"], [class*="Login"]');
     if (needLogin) {
       addLog('检测到未登录，尝试加载 Cookie...');
       const hasCookies = await loadCookies(page, cookiePath);
