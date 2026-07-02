@@ -283,7 +283,11 @@ async function clickFinalToutiaoPublish(page, addLog) {
   addLog('尝试点击头条最终发布按钮...');
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await page.waitForTimeout(500);
-  await waitForToutiaoDraftSaved(page, addLog);
+  await commitToutiaoEditorState(page, addLog);
+  const draftReady = await waitForToutiaoDraftSaved(page, addLog);
+  if (!draftReady) {
+    return { ok: false, reason: '头条草稿一直处于保存中，平台未完成保存，暂不继续点发布' };
+  }
   const responseSnippets = [];
   const onResponse = async (response) => {
     const request = response.request();
@@ -314,7 +318,12 @@ async function clickFinalToutiaoPublish(page, addLog) {
   const stillOnPublish = await page.evaluate(() => /预览并发布|发布更多收益|草稿保存中/.test(document.body.innerText || '')).catch(() => false);
   if (stillOnPublish && page.url().includes('/graphic/publish')) {
     addLog('头条授权弹窗处理后仍在发布页，重新点击预览并发布...');
-    await waitForToutiaoDraftSaved(page, addLog);
+    await commitToutiaoEditorState(page, addLog);
+    const retryDraftReady = await waitForToutiaoDraftSaved(page, addLog);
+    if (!retryDraftReady) {
+      page.off('response', onResponse);
+      return { ok: false, reason: '头条二次确认前草稿仍未保存完成' };
+    }
     let retryClicked = await clickToutiaoPublishButton(page);
     if (retryClicked) {
       await page.waitForTimeout(1500);
@@ -339,7 +348,7 @@ async function clickFinalToutiaoPublish(page, addLog) {
   const successSignal = await waitForToutiaoSuccessSignal(page);
   page.off('response', onResponse);
   if (responseSnippets.length) {
-    addLog(`头条发布接口片段：${responseSnippets.slice(-4).join(' || ')}`);
+    addLog(`头条发布接口片段：${responseSnippets.slice(-6).join(' || ')}`);
   }
   if (successSignal) return { ok: true, url: page.url(), signal: successSignal };
 
@@ -382,8 +391,41 @@ async function waitForToutiaoDraftSaved(page, addLog, timeout = 45000) {
     }
     await page.waitForTimeout(800);
   }
-  addLog('头条草稿保存等待超时，仍尝试发布');
+  addLog('头条草稿保存等待超时，已停止发布，避免保存失败');
   return false;
+}
+
+async function commitToutiaoEditorState(page, addLog) {
+  try {
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    await page.evaluate(() => {
+      const editableNodes = [...document.querySelectorAll('[contenteditable="true"], textarea, input')];
+      for (const el of editableNodes) {
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        el.blur?.();
+      }
+      document.activeElement?.blur?.();
+    });
+    const target = await page.evaluate(() => {
+      const buttons = [...document.querySelectorAll('button, [role="button"], a')]
+        .map(el => {
+          const rect = el.getBoundingClientRect();
+          const text = (el.innerText || el.textContent || '').replace(/\s+/g, '');
+          return { text, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, w: rect.width, h: rect.height };
+        })
+        .filter(item => /预览并发布|发布/.test(item.text) && item.w > 40 && item.h > 24)
+        .sort((a, b) => b.y - a.y)[0];
+      if (!buttons) return null;
+      return { x: Math.max(20, buttons.x - 260), y: buttons.y };
+    });
+    if (target) await page.mouse.click(target.x, target.y);
+    await page.waitForTimeout(1500);
+    addLog('已提交头条编辑器状态，等待草稿保存');
+  } catch (error) {
+    addLog(`提交头条编辑器状态失败，继续检查草稿：${error.message}`);
+  }
 }
 
 async function waitForToutiaoSuccessSignal(page, timeout = 12000) {
