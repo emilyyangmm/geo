@@ -339,37 +339,61 @@ async function clickFinalToutiaoPublish(page, addLog) {
 }
 
 async function clickToutiaoPublishButton(page) {
-  return page.evaluate(() => {
-    const nodes = [...document.querySelectorAll('button, [role="button"], a')];
-    const candidates = nodes.filter(node => {
-      const text = (node.innerText || node.textContent || '').replace(/\s+/g, '');
-      const disabled = node.disabled || node.getAttribute('aria-disabled') === 'true' || node.className?.toString().includes('disabled');
-      if (text.includes('定时') || text.includes('取消')) return false;
-      return !disabled && ['预览并发布', '确认发布', '发布', '发表', '提交发布'].some(t => text === t || text.includes(t));
-    });
-    candidates.sort((a, b) => {
-      const ta = (a.innerText || a.textContent || '').replace(/\s+/g, '');
-      const tb = (b.innerText || b.textContent || '').replace(/\s+/g, '');
-      const sa = ta.includes('预览并发布') ? 3 : ta.includes('确认发布') ? 2 : ta === '发布' ? 1 : 0;
-      const sb = tb.includes('预览并发布') ? 3 : tb.includes('确认发布') ? 2 : tb === '发布' ? 1 : 0;
-      return sb - sa;
-    });
-    const target = candidates[0];
-    if (!target) return '';
-    target.scrollIntoView({ block: 'center' });
-    target.click();
-    return (target.innerText || target.textContent || '').trim();
-  });
-}
-
-async function clickToutiaoBottomPrimaryButton(page) {
-  return page.evaluate(() => {
+  const target = await page.evaluate(() => {
     function visible(el) {
       const rect = el.getBoundingClientRect();
       const style = getComputedStyle(el);
-      return rect.width > 40 && rect.height > 24 && style.display !== 'none' && style.visibility !== 'hidden';
+      return rect.width > 40 && rect.height > 24 && rect.width < 220 && rect.height < 80 &&
+        style.display !== 'none' && style.visibility !== 'hidden' && rect.top >= 0;
     }
-    const nodes = [...document.querySelectorAll('button, [role="button"], a, div, span')]
+    const nodes = [...document.querySelectorAll('button, [role="button"], a')];
+    const candidates = nodes.filter(visible).map(node => {
+      const text = (node.innerText || node.textContent || '').replace(/\s+/g, '');
+      const rect = node.getBoundingClientRect();
+      const disabled = node.disabled || node.getAttribute('aria-disabled') === 'true' || node.className?.toString().includes('disabled');
+      return { node, text, rect, disabled };
+    }).filter(item => {
+      if (item.disabled || item.text.includes('定时') || item.text.includes('取消')) return false;
+      return ['预览并发布', '确认发布', '发布', '发表', '提交发布'].some(t => item.text === t || item.text.includes(t));
+    });
+    candidates.sort((a, b) => {
+      const score = item => {
+        let s = 0;
+        if (item.text === '预览并发布') s += 1000;
+        else if (item.text.includes('预览并发布')) s += 900;
+        else if (item.text === '确认发布') s += 800;
+        else if (item.text === '发布') s += 600;
+        s += item.rect.top > window.innerHeight - 200 ? 100 : 0;
+        s += item.rect.left / 1000;
+        s -= (item.rect.width * item.rect.height) / 100000;
+        return s;
+      };
+      return score(b) - score(a);
+    });
+    const target = candidates[0];
+    if (!target) return null;
+    return {
+      text: target.text,
+      x: target.rect.left + target.rect.width / 2,
+      y: target.rect.top + target.rect.height / 2,
+      width: target.rect.width,
+      height: target.rect.height,
+    };
+  });
+  if (!target) return '';
+  await page.mouse.click(target.x, target.y);
+  return `${target.text}@${Math.round(target.x)},${Math.round(target.y)}`;
+}
+
+async function clickToutiaoBottomPrimaryButton(page) {
+  const target = await page.evaluate(() => {
+    function visible(el) {
+      const rect = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return rect.width > 40 && rect.height > 24 && rect.width < 220 && rect.height < 80 &&
+        style.display !== 'none' && style.visibility !== 'hidden';
+    }
+    const nodes = [...document.querySelectorAll('button, [role="button"], a')]
       .filter(visible)
       .map(el => {
         const rect = el.getBoundingClientRect();
@@ -395,11 +419,18 @@ async function clickToutiaoBottomPrimaryButton(page) {
         return score(b) - score(a);
       });
     const target = nodes[0];
-    if (!target) return '';
-    target.el.scrollIntoView({ block: 'center' });
-    target.el.click();
-    return target.text || `底部主按钮@${Math.round(target.rect.left)},${Math.round(target.rect.top)}`;
+    if (!target) return null;
+    return {
+      text: target.text || '底部主按钮',
+      x: target.rect.left + target.rect.width / 2,
+      y: target.rect.top + target.rect.height / 2,
+      width: target.rect.width,
+      height: target.rect.height,
+    };
   });
+  if (!target) return '';
+  await page.mouse.click(target.x, target.y);
+  return `${target.text}@${Math.round(target.x)},${Math.round(target.y)}`;
 }
 
 async function handleToutiaoPostClickDialogs(page, addLog) {
