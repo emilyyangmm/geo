@@ -283,6 +283,7 @@ async function clickFinalToutiaoPublish(page, addLog) {
   addLog('尝试点击头条最终发布按钮...');
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await page.waitForTimeout(500);
+  await waitForToutiaoDraftSaved(page, addLog);
   const responseSnippets = [];
   const onResponse = async (response) => {
     const request = response.request();
@@ -313,6 +314,7 @@ async function clickFinalToutiaoPublish(page, addLog) {
   const stillOnPublish = await page.evaluate(() => /预览并发布|发布更多收益|草稿保存中/.test(document.body.innerText || '')).catch(() => false);
   if (stillOnPublish && page.url().includes('/graphic/publish')) {
     addLog('头条授权弹窗处理后仍在发布页，重新点击预览并发布...');
+    await waitForToutiaoDraftSaved(page, addLog);
     let retryClicked = await clickToutiaoPublishButton(page);
     if (retryClicked) {
       await page.waitForTimeout(1500);
@@ -357,6 +359,31 @@ async function clickFinalToutiaoPublish(page, addLog) {
     return { ok: true, url: page.url() };
   }
   return { ok: false, reason: result === 'blocked' ? '页面提示仍需补充资料/认证' : '未检测到发布成功提示' };
+}
+
+async function waitForToutiaoDraftSaved(page, addLog, timeout = 45000) {
+  const started = Date.now();
+  let lastText = '';
+  while (Date.now() - started < timeout) {
+    const status = await page.evaluate(() => {
+      const text = document.body.innerText || '';
+      const match = text.match(/草稿保存中|已保存|保存失败|保存成功/);
+      return match ? match[0] : '';
+    }).catch(() => '');
+    if (status && status !== lastText) {
+      addLog(`头条草稿状态：${status}`);
+      lastText = status;
+    }
+    if (status === '保存失败') {
+      await page.waitForTimeout(3000);
+    } else if (status === '已保存' || status === '保存成功' || !status) {
+      await page.waitForTimeout(1200);
+      return true;
+    }
+    await page.waitForTimeout(800);
+  }
+  addLog('头条草稿保存等待超时，仍尝试发布');
+  return false;
 }
 
 async function waitForToutiaoSuccessSignal(page, timeout = 12000) {
