@@ -283,6 +283,20 @@ async function clickFinalToutiaoPublish(page, addLog) {
   addLog('尝试点击头条最终发布按钮...');
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await page.waitForTimeout(500);
+  const responseSnippets = [];
+  const onResponse = async (response) => {
+    const request = response.request();
+    const url = response.url();
+    if (request.method() !== 'POST') return;
+    if (!/(publish|article|graphic|create|submit|audit|mp\/agw|mp\/api)/i.test(url)) return;
+    try {
+      const text = (await response.text()).replace(/\s+/g, ' ').slice(0, 220);
+      responseSnippets.push(`${response.status()} ${url.slice(0, 120)} ${text}`);
+    } catch {
+      responseSnippets.push(`${response.status()} ${url.slice(0, 160)}`);
+    }
+  };
+  page.on('response', onResponse);
 
   const clicked = await clickToutiaoPublishButton(page);
 
@@ -320,6 +334,13 @@ async function clickFinalToutiaoPublish(page, addLog) {
     }
   }
 
+  const successSignal = await waitForToutiaoSuccessSignal(page);
+  page.off('response', onResponse);
+  if (responseSnippets.length) {
+    addLog(`头条发布接口片段：${responseSnippets.slice(-4).join(' || ')}`);
+  }
+  if (successSignal) return { ok: true, url: page.url(), signal: successSignal };
+
   await page.waitForTimeout(3000);
 
   const result = await page.evaluate(() => {
@@ -336,6 +357,20 @@ async function clickFinalToutiaoPublish(page, addLog) {
     return { ok: true, url: page.url() };
   }
   return { ok: false, reason: result === 'blocked' ? '页面提示仍需补充资料/认证' : '未检测到发布成功提示' };
+}
+
+async function waitForToutiaoSuccessSignal(page, timeout = 12000) {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    const signal = await page.evaluate(() => {
+      const text = document.body.innerText || '';
+      const hit = text.match(/发布成功|发表成功|提交成功|提交审核|审核中|发布审核|内容已提交|等待审核/);
+      return hit ? hit[0] : '';
+    }).catch(() => '');
+    if (signal) return signal;
+    await page.waitForTimeout(250);
+  }
+  return '';
 }
 
 async function clickToutiaoPublishButton(page) {
