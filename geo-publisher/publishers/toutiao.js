@@ -299,7 +299,17 @@ async function clickFinalToutiaoPublish(page, addLog) {
   const stillOnPublish = await page.evaluate(() => /预览并发布|发布更多收益|草稿保存中/.test(document.body.innerText || '')).catch(() => false);
   if (stillOnPublish && page.url().includes('/graphic/publish')) {
     addLog('头条授权弹窗处理后仍在发布页，重新点击预览并发布...');
-    const retryClicked = await clickToutiaoPublishButton(page);
+    let retryClicked = await clickToutiaoPublishButton(page);
+    if (retryClicked) {
+      await page.waitForTimeout(1500);
+      const stillOnPublishAfterTextClick = await page.evaluate(() => /预览并发布|草稿保存中/.test(document.body.innerText || '')).catch(() => false);
+      if (stillOnPublishAfterTextClick) {
+        const bottomClicked = await clickToutiaoBottomPrimaryButton(page);
+        if (bottomClicked) retryClicked = bottomClicked;
+      }
+    } else {
+      retryClicked = await clickToutiaoBottomPrimaryButton(page);
+    }
     if (retryClicked) {
       addLog(`已再次点击按钮：${retryClicked}`);
       await Promise.race([
@@ -349,6 +359,46 @@ async function clickToutiaoPublishButton(page) {
     target.scrollIntoView({ block: 'center' });
     target.click();
     return (target.innerText || target.textContent || '').trim();
+  });
+}
+
+async function clickToutiaoBottomPrimaryButton(page) {
+  return page.evaluate(() => {
+    function visible(el) {
+      const rect = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return rect.width > 40 && rect.height > 24 && style.display !== 'none' && style.visibility !== 'hidden';
+    }
+    const nodes = [...document.querySelectorAll('button, [role="button"], a, div, span')]
+      .filter(visible)
+      .map(el => {
+        const rect = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        const text = (el.innerText || el.textContent || '').replace(/\s+/g, '');
+        return {
+          el,
+          text,
+          rect,
+          bg: style.backgroundColor || '',
+          color: style.color || '',
+          cls: String(el.className || ''),
+        };
+      })
+      .filter(item => {
+        if (item.text.includes('取消') || item.text.includes('定时')) return false;
+        const inBottomBar = item.rect.top > window.innerHeight - 180;
+        const looksRed = /rgb\((2[0-5]\d|1\d\d),\s*([0-9]|[1-9]\d),\s*([0-9]|[1-9]\d)\)/.test(item.bg);
+        return inBottomBar && (looksRed || /预览并发布|确认发布|发布/.test(item.text));
+      })
+      .sort((a, b) => {
+        const score = item => (/预览并发布|确认发布/.test(item.text) ? 1000 : 0) + item.rect.left + item.rect.width;
+        return score(b) - score(a);
+      });
+    const target = nodes[0];
+    if (!target) return '';
+    target.el.scrollIntoView({ block: 'center' });
+    target.el.click();
+    return target.text || `底部主按钮@${Math.round(target.rect.left)},${Math.round(target.rect.top)}`;
   });
 }
 
