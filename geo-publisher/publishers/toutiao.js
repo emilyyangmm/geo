@@ -373,6 +373,23 @@ async function clickFinalToutiaoPublish(page, addLog) {
 async function waitForToutiaoDraftSaved(page, addLog, timeout = 45000) {
   const started = Date.now();
   let lastText = '';
+  let apiSaved = false;
+  let apiFailure = '';
+  const onResponse = async (response) => {
+    const request = response.request();
+    const url = response.url();
+    if (request.method() !== 'POST') return;
+    if (!/\/mp\/agw\/article\/publish/i.test(url)) return;
+    try {
+      const json = await response.json();
+      if (json?.code === 0 && json?.data) {
+        apiSaved = true;
+      } else if (json?.code || json?.err_no) {
+        apiFailure = json?.message || json?.reason || `code=${json?.code || json?.err_no}`;
+      }
+    } catch {}
+  };
+  page.on('response', onResponse);
   while (Date.now() - started < timeout) {
     const status = await page.evaluate(() => {
       const text = document.body.innerText || '';
@@ -387,10 +404,19 @@ async function waitForToutiaoDraftSaved(page, addLog, timeout = 45000) {
       await page.waitForTimeout(3000);
     } else if (status === '已保存' || status === '保存成功' || !status) {
       await page.waitForTimeout(1200);
+      page.off('response', onResponse);
+      return true;
+    }
+    if (apiSaved) {
+      addLog('头条保存接口已返回成功，继续发布');
+      await page.waitForTimeout(5000);
+      page.off('response', onResponse);
       return true;
     }
     await page.waitForTimeout(800);
   }
+  page.off('response', onResponse);
+  if (apiFailure) addLog(`头条保存接口失败：${apiFailure}`);
   addLog('头条草稿保存等待超时，已停止发布，避免保存失败');
   return false;
 }
