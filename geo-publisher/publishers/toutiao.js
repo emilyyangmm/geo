@@ -273,7 +273,9 @@ async function configureToutiaoPublishOptions(page, addLog) {
     };
   });
 
-  if (changed.cover) addLog('封面已选无封面');
+  const coverState = await forceToutiaoNoCover(page);
+  if (changed.cover || coverState.clicked) addLog(`封面已选无封面${coverState.selected ? `（当前：${coverState.selected}）` : ''}`);
+  if (coverState.selected && coverState.selected !== '无封面') addLog(`头条封面选择可能未生效，当前检测为：${coverState.selected}`);
   if (false && changed.cover && fs.existsSync(TOUTIAO_COVER_PATH)) {
     const uploadRect = await page.evaluate(() => {
       const bodyText = document.body.innerText || '';
@@ -353,6 +355,37 @@ async function configureToutiaoPublishOptions(page, addLog) {
     return start >= 0 ? text.slice(start, start + 260).replace(/\s+/g, ' ') : '';
   }).catch(() => '');
   if (optionText) addLog(`发布设置快照：${optionText}`);
+}
+
+async function forceToutiaoNoCover(page) {
+  await page.waitForTimeout(500);
+  return page.evaluate(() => {
+    function norm(el) {
+      return (el?.innerText || el?.textContent || '').replace(/\s+/g, '');
+    }
+    function visible(el) {
+      const rect = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+    }
+    const labels = [...document.querySelectorAll('label, span, div, [role="radio"]')]
+      .filter(visible)
+      .map(el => ({ el, text: norm(el), rect: el.getBoundingClientRect(), cls: String(el.className || '') }))
+      .filter(item => ['单图', '三图', '无封面'].includes(item.text));
+    const target = labels.find(item => item.text === '无封面');
+    if (target) {
+      target.el.scrollIntoView({ block: 'center' });
+      const input = target.el.querySelector?.('input') || target.el.parentElement?.querySelector?.('input');
+      if (input) input.click();
+      else target.el.click();
+    }
+    const selected = labels.find(item => {
+      const input = item.el.querySelector?.('input') || item.el.parentElement?.querySelector?.('input');
+      const checked = input?.checked || item.el.getAttribute?.('aria-checked') === 'true' || /checked|selected/.test(item.cls);
+      return checked;
+    });
+    return { clicked: Boolean(target), selected: selected?.text || '' };
+  });
 }
 
 async function confirmToutiaoCoverUpload(page, addLog) {
