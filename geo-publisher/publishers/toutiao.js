@@ -359,7 +359,7 @@ async function configureToutiaoPublishOptions(page, addLog) {
 
 async function forceToutiaoNoCover(page) {
   await page.waitForTimeout(500);
-  return page.evaluate(() => {
+  const target = await page.evaluate(() => {
     function norm(el) {
       return (el?.innerText || el?.textContent || '').replace(/\s+/g, '');
     }
@@ -373,19 +373,42 @@ async function forceToutiaoNoCover(page) {
       .map(el => ({ el, text: norm(el), rect: el.getBoundingClientRect(), cls: String(el.className || '') }))
       .filter(item => ['单图', '三图', '无封面'].includes(item.text));
     const target = labels.find(item => item.text === '无封面');
-    if (target) {
-      target.el.scrollIntoView({ block: 'center' });
-      const input = target.el.querySelector?.('input') || target.el.parentElement?.querySelector?.('input');
-      if (input) input.click();
-      else target.el.click();
+    if (!target) return null;
+    target.el.scrollIntoView({ block: 'center' });
+    const rect = target.el.getBoundingClientRect();
+    return {
+      // The radio dot is usually just left of the text.
+      x: Math.max(1, rect.left - 16),
+      y: rect.top + rect.height / 2,
+    };
+  });
+  let clicked = false;
+  if (target) {
+    await page.mouse.click(target.x, target.y);
+    clicked = true;
+    await page.waitForTimeout(800);
+  }
+  const selected = await page.evaluate(() => {
+    function norm(el) {
+      return (el?.innerText || el?.textContent || '').replace(/\s+/g, '');
     }
+    function visible(el) {
+      const rect = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+    }
+    const labels = [...document.querySelectorAll('label, span, div, [role="radio"]')]
+      .filter(visible)
+      .map(el => ({ el, text: norm(el), cls: String(el.className || '') }))
+      .filter(item => ['单图', '三图', '无封面'].includes(item.text));
     const selected = labels.find(item => {
       const input = item.el.querySelector?.('input') || item.el.parentElement?.querySelector?.('input');
       const checked = input?.checked || item.el.getAttribute?.('aria-checked') === 'true' || /checked|selected/.test(item.cls);
       return checked;
     });
-    return { clicked: Boolean(target), selected: selected?.text || '' };
+    return selected?.text || '';
   });
+  return { clicked, selected };
 }
 
 async function confirmToutiaoCoverUpload(page, addLog) {
