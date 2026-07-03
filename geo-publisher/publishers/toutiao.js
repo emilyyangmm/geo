@@ -265,7 +265,7 @@ async function configureToutiaoPublishOptions(page, addLog) {
     }
 
     return {
-      cover: clickText('单图'),
+      cover: clickText('无封面'),
       ad: clickText('不投放广告'),
       first: uncheckText('头条首发'),
       rights: uncheckText('授权平台自动维权'),
@@ -273,8 +273,8 @@ async function configureToutiaoPublishOptions(page, addLog) {
     };
   });
 
-  if (changed.cover) addLog('封面已选单图');
-  if (changed.cover && fs.existsSync(TOUTIAO_COVER_PATH)) {
+  if (changed.cover) addLog('封面已选无封面');
+  if (false && changed.cover && fs.existsSync(TOUTIAO_COVER_PATH)) {
     const uploadRect = await page.evaluate(() => {
       const bodyText = document.body.innerText || '';
       const coverStart = bodyText.indexOf('展示封面');
