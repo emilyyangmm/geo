@@ -441,7 +441,9 @@ async function clickFinalToutiaoPublish(page, addLog, networkMonitor) {
   await commitToutiaoEditorState(page, addLog);
   const draftReady = await waitForToutiaoDraftSaved(page, addLog, networkMonitor);
   if (!draftReady) {
-    return { ok: false, reason: '头条草稿一直处于保存中，平台未完成保存，暂不继续点发布' };
+    const draftResult = await saveToutiaoDraft(page, addLog);
+    if (draftResult.ok) return { ok: true, url: draftResult.url || page.url(), draft: true };
+    return { ok: false, reason: `头条草稿一直处于保存中，且存草稿失败：${draftResult.reason}` };
   }
   const responseSnippets = [];
   const onResponse = async (response) => {
@@ -477,7 +479,9 @@ async function clickFinalToutiaoPublish(page, addLog, networkMonitor) {
     const retryDraftReady = await waitForToutiaoDraftSaved(page, addLog, networkMonitor);
     if (!retryDraftReady) {
       page.off('response', onResponse);
-      return { ok: false, reason: '头条二次确认前草稿仍未保存完成' };
+      const draftResult = await saveToutiaoDraft(page, addLog);
+      if (draftResult.ok) return { ok: true, url: draftResult.url || page.url(), draft: true };
+      return { ok: false, reason: `头条二次确认前草稿仍未保存完成，且存草稿失败：${draftResult.reason}` };
     }
     let retryClicked = await clickToutiaoPublishButton(page);
     if (retryClicked) {
@@ -523,6 +527,48 @@ async function clickFinalToutiaoPublish(page, addLog, networkMonitor) {
     return { ok: true, url: page.url() };
   }
   return { ok: false, reason: result === 'blocked' ? '页面提示仍需补充资料/认证' : '未检测到发布成功提示' };
+}
+
+async function saveToutiaoDraft(page, addLog) {
+  addLog('尝试改为保存头条草稿...');
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
+  await page.waitForTimeout(800);
+  const clicked = await page.evaluate(() => {
+    function visible(el) {
+      const rect = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return rect.width > 30 && rect.height > 20 && style.display !== 'none' && style.visibility !== 'hidden';
+    }
+    const candidates = [...document.querySelectorAll('button, [role="button"], a')]
+      .filter(visible)
+      .map(el => {
+        const rect = el.getBoundingClientRect();
+        const text = (el.innerText || el.textContent || '').replace(/\s+/g, '');
+        return { el, text, rect };
+      })
+      .filter(item => /存草稿|保存草稿|草稿/.test(item.text) && !/草稿保存中/.test(item.text))
+      .sort((a, b) => b.rect.top - a.rect.top);
+    const target = candidates[0];
+    if (!target) return '';
+    target.el.scrollIntoView({ block: 'center' });
+    target.el.click();
+    return target.text || '存草稿';
+  }).catch(() => '');
+  if (!clicked) return { ok: false, reason: '没有找到存草稿按钮' };
+  addLog(`已点击头条按钮：${clicked}`);
+  await page.waitForTimeout(5000);
+  const state = await page.evaluate(() => {
+    const text = document.body.innerText || '';
+    if (/已保存|保存成功|草稿已保存|存草稿成功/.test(text)) return 'saved';
+    if (/保存失败|失败|错误/.test(text)) return 'failed';
+    if (/草稿保存中/.test(text)) return 'saving';
+    return 'unknown';
+  }).catch(() => 'unknown');
+  if (state === 'saved' || state === 'unknown') {
+    addLog('头条已尝试保存到草稿箱；如页面仍停留，请到头条草稿箱确认');
+    return { ok: true, url: page.url() };
+  }
+  return { ok: false, reason: state === 'saving' ? '仍显示草稿保存中' : '页面提示保存失败' };
 }
 
 async function waitForToutiaoDraftSaved(page, addLog, networkMonitor, timeout = 45000) {
