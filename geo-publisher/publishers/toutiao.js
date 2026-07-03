@@ -102,6 +102,48 @@ async function clickByText(page, texts) {
   }, list);
 }
 
+function createToutiaoNetworkMonitor(page) {
+  const events = [];
+  const onResponse = async (response) => {
+    const request = response.request();
+    const url = response.url();
+    if (request.method() !== 'POST') return;
+    if (!/\/mp\/agw\/article\/publish/i.test(url)) return;
+    try {
+      const text = await response.text();
+      let json = null;
+      try {
+        json = JSON.parse(text);
+      } catch {}
+      events.push({
+        at: Date.now(),
+        status: response.status(),
+        url,
+        code: json?.code ?? json?.err_no ?? '',
+        message: json?.message || json?.reason || '',
+        hasContent: Boolean(json?.data?.content),
+        snippet: text.replace(/\s+/g, ' ').slice(0, 220),
+      });
+      if (events.length > 20) events.shift();
+    } catch {}
+  };
+  page.on('response', onResponse);
+  return {
+    stop() {
+      page.off('response', onResponse);
+    },
+    hasSaveSuccessSince(time) {
+      return events.some(item => item.at >= time && item.code === 0 && item.hasContent);
+    },
+    lastFailureSince(time) {
+      return [...events].reverse().find(item => item.at >= time && item.code && item.code !== 0);
+    },
+    snippets() {
+      return events.slice(-6).map(item => `${item.status} code=${item.code || '-'} ${item.message || ''} ${item.url.slice(0, 110)} ${item.snippet}`);
+    },
+  };
+}
+
 async function configureToutiaoPublishOptions(page, addLog) {
   addLog('处理头条发布设置...');
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
@@ -279,12 +321,12 @@ async function confirmToutiaoCoverUpload(page, addLog) {
   }
 }
 
-async function clickFinalToutiaoPublish(page, addLog) {
+async function clickFinalToutiaoPublish(page, addLog, networkMonitor) {
   addLog('尝试点击头条最终发布按钮...');
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await page.waitForTimeout(500);
   await commitToutiaoEditorState(page, addLog);
-  const draftReady = await waitForToutiaoDraftSaved(page, addLog);
+  const draftReady = await waitForToutiaoDraftSaved(page, addLog, networkMonitor);
   if (!draftReady) {
     return { ok: false, reason: '头条草稿一直处于保存中，平台未完成保存，暂不继续点发布' };
   }
@@ -319,7 +361,7 @@ async function clickFinalToutiaoPublish(page, addLog) {
   if (stillOnPublish && page.url().includes('/graphic/publish')) {
     addLog('头条授权弹窗处理后仍在发布页，重新点击预览并发布...');
     await commitToutiaoEditorState(page, addLog);
-    const retryDraftReady = await waitForToutiaoDraftSaved(page, addLog);
+    const retryDraftReady = await waitForToutiaoDraftSaved(page, addLog, networkMonitor);
     if (!retryDraftReady) {
       page.off('response', onResponse);
       return { ok: false, reason: '头条二次确认前草稿仍未保存完成' };
@@ -370,7 +412,7 @@ async function clickFinalToutiaoPublish(page, addLog) {
   return { ok: false, reason: result === 'blocked' ? '页面提示仍需补充资料/认证' : '未检测到发布成功提示' };
 }
 
-async function waitForToutiaoDraftSaved(page, addLog, timeout = 45000) {
+async function waitForToutiaoDraftSaved(page, addLog, networkMonitor, timeout = 45000) {
   const started = Date.now();
   let lastText = '';
   let apiSaved = false;
@@ -413,9 +455,17 @@ async function waitForToutiaoDraftSaved(page, addLog, timeout = 45000) {
       page.off('response', onResponse);
       return true;
     }
+    if (networkMonitor?.hasSaveSuccessSince(started - 60000)) {
+      addLog('头条保存接口此前已返回成功，继续发布');
+      await page.waitForTimeout(5000);
+      page.off('response', onResponse);
+      return true;
+    }
     await page.waitForTimeout(800);
   }
   page.off('response', onResponse);
+  const networkFailure = networkMonitor?.lastFailureSince(started - 60000);
+  if (networkFailure) addLog(`头条接口最近失败：${networkFailure.message || networkFailure.code}`);
   if (apiFailure) addLog(`头条保存接口失败：${apiFailure}`);
   addLog('头条草稿保存等待超时，已停止发布，避免保存失败');
   return false;
@@ -637,6 +687,7 @@ async function clickToutiaoModalConfirm(page) {
 async function publish({ title, content, summary, tags, creds, cookiePath, addLog }) {
   const browser = await launchBrowser();
   const page = await browser.newPage();
+  const networkMonitor = createToutiaoNetworkMonitor(page);
 
   try {
     addLog('打开头条号后台...');
@@ -747,17 +798,20 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
 
     await configureToutiaoPublishOptions(page, addLog);
 
-    const publishResult = await clickFinalToutiaoPublish(page, addLog);
+    const publishResult = await clickFinalToutiaoPublish(page, addLog, networkMonitor);
     await saveCookies(page, cookiePath);
     if (publishResult.ok) return { url: publishResult.url || page.url() };
 
     addLog(`头条未确认发布成功：${publishResult.reason}`);
+    const networkSnippets = networkMonitor.snippets();
+    if (networkSnippets.length) addLog(`头条接口记录：${networkSnippets.join(' || ')}`);
     await saveDebugSnapshot(page, 'toutiao', 'publish-blocked', addLog);
     addLog('头条仍停在发布页，已保存截图；线上服务器无法人工点确认');
     await waitForManualAction(addLog, '等待手动确认头条发布', 300000);
     return { url: page.url(), manual: true };
 
   } finally {
+    networkMonitor.stop();
     await browser.close();
   }
 }
