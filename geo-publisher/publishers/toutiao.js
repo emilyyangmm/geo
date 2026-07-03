@@ -115,6 +115,7 @@ function createToutiaoNetworkMonitor(page) {
       try {
         json = JSON.parse(text);
       } catch {}
+      const postData = request.postData() || '';
       events.push({
         at: Date.now(),
         status: response.status(),
@@ -122,6 +123,7 @@ function createToutiaoNetworkMonitor(page) {
         code: json?.code ?? json?.err_no ?? '',
         message: json?.message || json?.reason || '',
         hasContent: Boolean(json?.data?.content),
+        payload: summarizeToutiaoPayload(postData),
         snippet: text.replace(/\s+/g, ' ').slice(0, 220),
       });
       if (events.length > 20) events.shift();
@@ -139,9 +141,64 @@ function createToutiaoNetworkMonitor(page) {
       return [...events].reverse().find(item => item.at >= time && item.code && item.code !== 0);
     },
     snippets() {
-      return events.slice(-6).map(item => `${item.status} code=${item.code || '-'} ${item.message || ''} ${item.url.slice(0, 110)} ${item.snippet}`);
+      return events.slice(-6).map(item => `${item.status} code=${item.code || '-'} ${item.message || ''} payload=${item.payload} ${item.url.slice(0, 110)} ${item.snippet}`);
     },
   };
+}
+
+function summarizeToutiaoPayload(postData) {
+  if (!postData) return 'empty';
+  let value = postData;
+  try {
+    value = decodeURIComponent(postData);
+  } catch {}
+  const formSummary = summarizeFormPayload(postData);
+  if (formSummary) return formSummary;
+  const summary = [];
+  const checks = [
+    ['title', /"title"\s*:\s*"([^"]*)"/],
+    ['pgc_id', /"pgc_id"\s*:\s*"?([^",}]*)/],
+    ['article_id', /"article_id"\s*:\s*"?([^",}]*)/],
+    ['cover', /"cover[^"]*"\s*:\s*(\[[\s\S]{0,80}?\]|\{[\s\S]{0,80}?\}|"[^"]*")/],
+    ['content_len', /"content"\s*:\s*"([\s\S]*)"/],
+  ];
+  for (const [name, pattern] of checks) {
+    const match = value.match(pattern);
+    if (!match) continue;
+    if (name === 'content_len') summary.push(`${name}=${match[1].length}`);
+    else summary.push(`${name}=${String(match[1]).slice(0, 60)}`);
+  }
+  if (!summary.length) {
+    const keys = [...value.matchAll(/"([^"]+)"\s*:/g)].map(m => m[1]).slice(0, 12);
+    if (keys.length) summary.push(`keys=${keys.join(',')}`);
+    else summary.push(value.slice(0, 160));
+  }
+  return summary.join(';');
+}
+
+function summarizeFormPayload(postData) {
+  let params = null;
+  try {
+    params = new URLSearchParams(postData);
+  } catch {
+    return '';
+  }
+  const keys = [...params.keys()];
+  if (!keys.length) return '';
+  const interesting = [];
+  for (const key of keys) {
+    const raw = params.get(key) || '';
+    let value = raw;
+    try {
+      value = decodeURIComponent(raw);
+    } catch {}
+    if (/title|content|article|abstract|cover|image|thumb|pgc|group|claim|source|word|declaration|wtt/i.test(key)) {
+      if (/content|article/i.test(key)) interesting.push(`${key}_len=${value.length}`);
+      else interesting.push(`${key}=${String(value).slice(0, 70)}`);
+    }
+  }
+  if (interesting.length) return interesting.slice(0, 16).join(';');
+  return `keys=${keys.slice(0, 16).join(',')}`;
 }
 
 async function configureToutiaoPublishOptions(page, addLog) {
@@ -415,6 +472,7 @@ async function clickFinalToutiaoPublish(page, addLog, networkMonitor) {
 async function waitForToutiaoDraftSaved(page, addLog, networkMonitor, timeout = 45000) {
   const started = Date.now();
   let lastText = '';
+  let nudged = false;
   let apiSaved = false;
   let apiFailure = '';
   const onResponse = async (response) => {
@@ -461,6 +519,10 @@ async function waitForToutiaoDraftSaved(page, addLog, networkMonitor, timeout = 
       page.off('response', onResponse);
       return true;
     }
+    if (!nudged && Date.now() - started > 12000) {
+      nudged = true;
+      await nudgeToutiaoAutosave(page, addLog);
+    }
     await page.waitForTimeout(800);
   }
   page.off('response', onResponse);
@@ -469,6 +531,40 @@ async function waitForToutiaoDraftSaved(page, addLog, networkMonitor, timeout = 
   if (apiFailure) addLog(`头条保存接口失败：${apiFailure}`);
   addLog('头条草稿保存等待超时，已停止发布，避免保存失败');
   return false;
+}
+
+async function nudgeToutiaoAutosave(page, addLog) {
+  try {
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await page.waitForTimeout(500);
+    const clicked = await page.evaluate(() => {
+      const nodes = [...document.querySelectorAll('button, a, span, div')]
+        .map(el => {
+          const rect = el.getBoundingClientRect();
+          const text = (el.innerText || el.textContent || '').replace(/\s+/g, '');
+          return { el, text, rect };
+        })
+        .filter(item => item.rect.width > 20 && item.rect.height > 16 && item.rect.top >= 0);
+      const backTop = nodes.find(item => item.text.includes('回到顶部'));
+      if (backTop) {
+        backTop.el.click();
+        return '回到顶部';
+      }
+      return '';
+    });
+    if (clicked) {
+      addLog(`已点击头条保存触发点：${clicked}`);
+      await page.waitForTimeout(1200);
+    }
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event('blur'));
+      window.dispatchEvent(new Event('focus'));
+    });
+    addLog('已再次触发头条自动保存');
+  } catch (error) {
+    addLog(`触发头条自动保存失败：${error.message}`);
+  }
 }
 
 async function commitToutiaoEditorState(page, addLog) {
