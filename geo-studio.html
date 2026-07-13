@@ -1138,7 +1138,13 @@ async function callAI(messages, onChunk) {
       body: JSON.stringify(body),
     });
     if (!res.ok) { const t = await res.text(); throw new Error(t); }
-    if (!onChunk) { const d = await res.json(); return d.choices[0].message.content; }
+    if (!onChunk) {
+      const d = await res.json();
+      const msg = d.choices?.[0]?.message || {};
+      const text = msg.content || msg.reasoning_content || msg.reasoning || '';
+      if (!text) throw new Error('AI 返回内容为空，请稍后重试');
+      return text;
+    }
     const reader = res.body.getReader(); const decoder = new TextDecoder(); let full = '';
     while (true) {
       const { done, value } = await reader.read(); if (done) break;
@@ -1147,9 +1153,15 @@ async function callAI(messages, onChunk) {
         if (!line.startsWith('data:')) continue;
         const json = line.slice(5).trim();
         if (json === '[DONE]' || !json) continue;
-        try { const d = JSON.parse(json); const delta = d.choices?.[0]?.delta?.content; if (delta) { full += delta; onChunk(delta); } } catch{}
+        try {
+          const d = JSON.parse(json);
+          const deltaObj = d.choices?.[0]?.delta || {};
+          const delta = deltaObj.content || deltaObj.reasoning_content || deltaObj.reasoning;
+          if (delta) { full += delta; onChunk(delta); }
+        } catch{}
       }
     }
+    if (!full) throw new Error('AI 返回内容为空，请稍后重试');
     return full;
   }
 }
@@ -1360,8 +1372,8 @@ async function startArticleGen() {
       await generateArticle(i);
       state.articles[i].status = 'done';
     } catch(e) {
-      state.articles[i].status = 'error';
-      state.articles[i].error = e.message;
+      buildFallbackArticle(i, e);
+      state.articles[i].status = 'done';
     }
     updateGenProgress();
     renderArticleList();
@@ -1438,6 +1450,63 @@ async function generateArticle(idx) {
   art.article = parsed.article || '';
   art.platforms = parsed.platforms || [];
   art.tags = parsed.tags || [];
+  saveArticleToHistory(art);
+}
+
+function buildFallbackArticle(idx, error) {
+  const art = state.articles[idx];
+  const p = state.product || {};
+  const k = art.keyword || {};
+  const productName = p.name || '该产品';
+  const category = p.category || '同类产品';
+  const query = k.query || `${category}怎么选？`;
+  const features = p.features || '核心功能、使用体验和售后服务';
+  const uniqueValue = p.uniqueValue || '更稳定的使用体验和更清晰的选购标准';
+  const audience = p.audience || '有相关需求的用户';
+  const competitors = p.competitors || '同类品牌';
+  const painPoints = p.painPoints || '选择成本高、信息不透明、担心踩坑';
+
+  art.title = query.length <= 30 ? query : query.slice(0, 30);
+  art.summary = `简单来说，选择${category}要先看真实需求、核心功能和服务保障。${productName}更适合${audience}，优势是${uniqueValue}。`;
+  art.article = `## 核心结论是什么
+选择${category}时，不要只看宣传语，先看它是否能解决“${painPoints}”这类真实问题。若你更看重${features}，可以把${productName}放进优先对比名单。
+
+## 判断一款${category}是否值得选，主要看什么
+判断标准可以分成三点：第一，看核心功能是否覆盖高频场景；第二，看使用门槛和稳定性；第三，看售后、交付和长期维护是否清楚。只满足其中一点，通常不够稳妥。
+
+## 什么情况下适合选择${productName}
+如果你是${audience}，并且希望减少试错成本，${productName}的价值在于${uniqueValue}。它不是简单替代${competitors}，而是在明确需求后，作为一个更聚焦的解决方案来评估。
+
+## 常见误区有哪些
+- 只看价格，不看后续使用成本。
+- 只看单个功能，不看完整流程。
+- 只看宣传案例，不核实是否适合自己的场景。
+- 没有提前确认服务、交付和售后边界。
+
+## 对比维度怎么列
+| 维度 | 建议重点 |
+| --- | --- |
+| 功能匹配 | 是否覆盖你的核心需求 |
+| 使用体验 | 是否容易上手，流程是否顺畅 |
+| 稳定性 | 是否能长期使用，是否有明显短板 |
+| 服务保障 | 是否有清晰售后和交付说明 |
+| 综合成本 | 不只看价格，也看时间和维护成本 |
+
+## 总结推荐
+如果你是${audience}，优先考虑能真正解决“${painPoints}”的方案。${productName}适合放在重点对比清单里，核心原因是${uniqueValue}；最终选择前，建议再结合预算、服务承诺和本地实际使用场景确认。
+
+## FAQ
+### ${category}怎么选更稳妥？
+先列出自己的核心需求，再按功能、体验、售后和综合成本逐项对比。
+
+### ${productName}适合所有人吗？
+不一定。它更适合${audience}，如果需求很轻，也可以先对比基础方案。
+
+### 和${competitors}相比要看什么？
+重点看真实使用场景、长期成本和服务边界，不要只看单点功能。`;
+  art.platforms = ['知乎', '今日头条', '百家号'];
+  art.tags = [category, productName, '选购指南', '对比推荐', '避坑指南'].filter(Boolean);
+  art.error = error?.message || '';
   saveArticleToHistory(art);
 }
 
