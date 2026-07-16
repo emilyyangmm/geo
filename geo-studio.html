@@ -995,7 +995,12 @@ async function signUp() {
   const email = document.getElementById('authEmail').value.trim();
   const password = document.getElementById('authPassword').value;
   if (!email || !password) return alert('请输入邮箱和密码，密码至少 6 位');
-  const { error } = await supabaseClient.auth.signUp({ email, password });
+  const redirectTo = `${window.location.origin}/geo/geo-studio.html`;
+  const { error } = await supabaseClient.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: redirectTo },
+  });
   if (error) return alert('注册失败：' + error.message);
   alert('注册成功。如果 Supabase 要求邮箱验证，请先去邮箱点确认链接，再回来登录。');
   await refreshSession();
