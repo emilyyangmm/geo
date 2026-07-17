@@ -357,6 +357,7 @@ async function configureToutiaoPublishOptions(page, addLog) {
     return start >= 0 ? text.slice(start, start + 260).replace(/\s+/g, ' ') : '';
   }).catch(() => '');
   if (optionText) addLog(`发布设置快照：${optionText}`);
+  await triggerToutiaoAutosaveAfterCover(page, addLog);
 }
 
 async function getToutiaoCoverSelection(page) {
@@ -402,8 +403,68 @@ async function confirmToutiaoCoverUpload(page, addLog) {
   if (clicked) {
     addLog(`已确认封面上传：${clicked}`);
     await page.waitForTimeout(2500);
+    await waitForToutiaoCoverVisible(page, addLog);
   } else {
     addLog('封面已上传，但未找到弹窗确认按钮，请手动确认封面');
+  }
+}
+
+async function waitForToutiaoCoverVisible(page, addLog, timeout = 12000) {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    const state = await page.evaluate(() => {
+      const text = document.body.innerText || '';
+      const coverStart = text.indexOf('展示封面');
+      const locationStart = text.indexOf('添加位置');
+      const imgs = [...document.querySelectorAll('img')]
+        .map(img => {
+          const rect = img.getBoundingClientRect();
+          return {
+            src: img.currentSrc || img.src || '',
+            width: rect.width,
+            height: rect.height,
+            top: rect.top + window.scrollY,
+          };
+        })
+        .filter(img => img.width >= 40 && img.height >= 40);
+      const coverImgs = imgs.filter(img => {
+        if (coverStart < 0 || locationStart < 0) return true;
+        return img.top > 0;
+      });
+      return {
+        hasEditReplace: /编辑替换/.test(text),
+        imgCount: coverImgs.length,
+        firstSrc: coverImgs[0]?.src?.slice(0, 90) || '',
+      };
+    }).catch(() => ({ hasEditReplace: false, imgCount: 0, firstSrc: '' }));
+    if (state.hasEditReplace || state.imgCount > 0) {
+      addLog(`头条封面缩略图已出现：${state.imgCount || 1} 张`);
+      return true;
+    }
+    await page.waitForTimeout(500);
+  }
+  addLog('头条封面上传后未检测到缩略图，后续保存可能失败');
+  return false;
+}
+
+async function triggerToutiaoAutosaveAfterCover(page, addLog) {
+  try {
+    const found = await waitForAnySelector(page, TOUTIAO_TITLE_SELECTORS, 5000);
+    if (!found) return;
+    await found.frame.click(found.selector);
+    await page.keyboard.press('End');
+    await page.keyboard.type(' ');
+    await page.keyboard.press('Backspace');
+    await page.evaluate(() => {
+      const active = document.activeElement;
+      active?.dispatchEvent?.(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '' }));
+      active?.dispatchEvent?.(new Event('change', { bubbles: true }));
+      active?.blur?.();
+    }).catch(() => {});
+    addLog('已触发头条封面后的自动保存');
+    await page.waitForTimeout(3500);
+  } catch (error) {
+    addLog(`触发头条封面后自动保存失败：${error.message}`);
   }
 }
 
