@@ -265,7 +265,7 @@ async function configureToutiaoPublishOptions(page, addLog) {
     }
 
     return {
-      cover: clickText('无封面'),
+      cover: clickText('单图'),
       ad: clickText('不投放广告'),
       first: uncheckText('头条首发'),
       rights: uncheckText('授权平台自动维权'),
@@ -273,10 +273,10 @@ async function configureToutiaoPublishOptions(page, addLog) {
     };
   });
 
-  const coverState = await forceToutiaoNoCover(page);
-  if (changed.cover || coverState.clicked) addLog(`封面已选无封面${coverState.selected ? `（当前：${coverState.selected}）` : ''}`);
-  if (coverState.selected && coverState.selected !== '无封面') addLog(`头条封面选择可能未生效，当前检测为：${coverState.selected}`);
-  if (false && changed.cover && fs.existsSync(TOUTIAO_COVER_PATH)) {
+  const coverState = await getToutiaoCoverSelection(page);
+  if (changed.cover || coverState.selected) addLog(`封面已选单图${coverState.selected ? `（当前：${coverState.selected}）` : ''}`);
+  if (coverState.selected && coverState.selected !== '单图') addLog(`头条封面选择可能未生效，当前检测为：${coverState.selected}`);
+  if (fs.existsSync(TOUTIAO_COVER_PATH)) {
     const uploadRect = await page.evaluate(() => {
       const bodyText = document.body.innerText || '';
       const coverStart = bodyText.indexOf('展示封面');
@@ -341,9 +341,11 @@ async function configureToutiaoPublishOptions(page, addLog) {
         addLog('已通过文件输入框上传头条封面图');
         await confirmToutiaoCoverUpload(page, addLog);
       } else {
-        addLog('未找到头条封面上传控件，请手动确认封面');
+        addLog('未找到头条封面上传控件，头条可能无法保存草稿');
       }
     }
+  } else {
+    addLog(`默认封面文件不存在，头条可能无法保存草稿：${TOUTIAO_COVER_PATH}`);
   }
   if (changed.ad) addLog('广告已选不投放');
   if (changed.first) addLog('首发声明已取消');
@@ -357,37 +359,8 @@ async function configureToutiaoPublishOptions(page, addLog) {
   if (optionText) addLog(`发布设置快照：${optionText}`);
 }
 
-async function forceToutiaoNoCover(page) {
+async function getToutiaoCoverSelection(page) {
   await page.waitForTimeout(500);
-  const target = await page.evaluate(() => {
-    function norm(el) {
-      return (el?.innerText || el?.textContent || '').replace(/\s+/g, '');
-    }
-    function visible(el) {
-      const rect = el.getBoundingClientRect();
-      const style = getComputedStyle(el);
-      return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
-    }
-    const labels = [...document.querySelectorAll('label, span, div, [role="radio"]')]
-      .filter(visible)
-      .map(el => ({ el, text: norm(el), rect: el.getBoundingClientRect(), cls: String(el.className || '') }))
-      .filter(item => ['单图', '三图', '无封面'].includes(item.text));
-    const target = labels.find(item => item.text === '无封面');
-    if (!target) return null;
-    target.el.scrollIntoView({ block: 'center' });
-    const rect = target.el.getBoundingClientRect();
-    return {
-      // The radio dot is usually just left of the text.
-      x: Math.max(1, rect.left - 16),
-      y: rect.top + rect.height / 2,
-    };
-  });
-  let clicked = false;
-  if (target) {
-    await page.mouse.click(target.x, target.y);
-    clicked = true;
-    await page.waitForTimeout(800);
-  }
   const selected = await page.evaluate(() => {
     function norm(el) {
       return (el?.innerText || el?.textContent || '').replace(/\s+/g, '');
@@ -408,7 +381,7 @@ async function forceToutiaoNoCover(page) {
     });
     return selected?.text || '';
   });
-  return { clicked, selected };
+  return { selected };
 }
 
 async function confirmToutiaoCoverUpload(page, addLog) {
