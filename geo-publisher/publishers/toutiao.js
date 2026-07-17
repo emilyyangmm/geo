@@ -4,6 +4,7 @@
  */
 
 const { launchBrowser, saveCookies, loadCookies, waitForManualAction, saveDebugSnapshot } = require('./base');
+const { extractToutiaoCoverInfo } = require('./toutiao-cover');
 const fs = require('fs');
 const path = require('path');
 
@@ -104,9 +105,17 @@ async function clickByText(page, texts) {
 
 function createToutiaoNetworkMonitor(page) {
   const events = [];
+  let latestCoverInfo = null;
   const onResponse = async (response) => {
     const request = response.request();
     const url = response.url();
+    if (/\/article_material\/photo\/info/i.test(url)) {
+      try {
+        const json = JSON.parse(await response.text());
+        const coverInfo = extractToutiaoCoverInfo(json);
+        if (coverInfo) latestCoverInfo = coverInfo;
+      } catch {}
+    }
     if (request.method() !== 'POST') return;
     if (!/\/mp\/agw\/article\/publish/i.test(url)) return;
     try {
@@ -142,6 +151,9 @@ function createToutiaoNetworkMonitor(page) {
     },
     snippets() {
       return events.slice(-6).map(item => `${item.status} code=${item.code || '-'} ${item.message || ''} payload=${item.payload} ${item.url.slice(0, 110)} ${item.snippet}`);
+    },
+    latestCoverInfo() {
+      return latestCoverInfo;
     },
   };
 }
@@ -192,7 +204,15 @@ function summarizeFormPayload(postData) {
     try {
       value = decodeURIComponent(raw);
     } catch {}
-    if (/title|content|article|abstract|cover|image|thumb|pgc|group|claim|source|word|declaration|wtt/i.test(key)) {
+    if (key === 'pgc_feed_covers') {
+      try {
+        const covers = JSON.parse(value);
+        const cover = Array.isArray(covers) ? covers[0] : null;
+        interesting.push(`pgc_feed_covers=${covers.length};cover_id=${cover?.id || ''};cover_uri=${cover?.uri || ''};cover_url=${String(cover?.url || '').slice(0, 120)}`);
+      } catch {
+        interesting.push(`pgc_feed_covers=${String(value).slice(0, 120)}`);
+      }
+    } else if (/title|content|article|abstract|cover|image|thumb|pgc|group|claim|source|word|declaration|wtt/i.test(key)) {
       if (/content|article/i.test(key)) interesting.push(`${key}_len=${value.length}`);
       else interesting.push(`${key}=${String(value).slice(0, 70)}`);
     }
@@ -1035,6 +1055,12 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
     if (publishResult.ok) return { url: publishResult.url || page.url() };
 
     addLog(`头条未确认发布成功：${publishResult.reason}`);
+    const coverInfo = networkMonitor.latestCoverInfo();
+    if (coverInfo) {
+      addLog(`头条上传素材信息：uri=${coverInfo.uri}; url=${coverInfo.url || '-'}; ${coverInfo.width}x${coverInfo.height}; md5=${coverInfo.md5 || '-'}`);
+    } else {
+      addLog('未捕获到头条上传素材接口返回值，无法确认封面素材 ID');
+    }
     const networkSnippets = networkMonitor.snippets();
     if (networkSnippets.length) addLog(`头条接口记录：${networkSnippets.join(' || ')}`);
     await saveDebugSnapshot(page, 'toutiao', 'publish-blocked', addLog);
