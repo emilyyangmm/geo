@@ -898,6 +898,11 @@
             <option value="">请选择历史产品</option>
           </select>
         </div>
+        <div class="field" style="max-width:720px;margin:0 0 12px">
+          <label>检测别名</label>
+          <input id="effectAliases" type="text" oninput="saveEffectAliases()" placeholder="例如：地派温泉，龙门地派温泉，地派温泉酒店" />
+          <div class="hint">填入 AI 可能使用的简称、全称或常见叫法，用逗号分隔。</div>
+        </div>
         <div id="effectCampaignSummary" style="color:var(--muted);font-size:13px;line-height:1.8">请先在“产品定义”填写产品信息，然后点击“同步当前产品”。</div>
         <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
           <button class="btn btn-primary" onclick="syncCurrentCampaign()">同步当前产品</button>
@@ -935,6 +940,7 @@
           <button class="btn" onclick="openSelectedAiPlatform()">打开 AI 平台</button>
           <button class="btn btn-sm" onclick="copyEffectQuestion()">复制问题</button>
           <button class="btn btn-primary" onclick="saveRealAiScan()">保存真实检测</button>
+          <button class="btn btn-sm" onclick="reanalyzeLatestEffectScan()">按当前别名重新判定最近一条</button>
         </div>
       </div>
 
@@ -974,6 +980,7 @@ const state = {
   articles: [],
   history: [],
   effectCampaign: null,
+  effectScans: [],
   currentFilter: 'all',
   user: null,
   accessToken: '',
@@ -1621,6 +1628,7 @@ function selectEffectProduct(productName) {
   state.effectCampaign = null;
   const question = document.getElementById('effectQuestion');
   if (question) question.value = '';
+  loadEffectAliases();
   loadEffectDashboard();
 }
 
@@ -1669,6 +1677,40 @@ const AI_PLATFORM_LINKS = {
 const AI_PLATFORM_LABELS = {
   doubao: '豆包', deepseek: 'DeepSeek', kimi: 'Kimi', qianwen: '千问', wenxin: '文心一言'
 };
+
+const EFFECT_ALIASES_KEY = 'geo_effect_aliases_v1';
+
+function parseEffectAliases(value) {
+  return [...new Set(String(value || '').split(/[，,、\n]/).map(item => item.trim()).filter(Boolean))];
+}
+
+function getEffectAliasStore() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(EFFECT_ALIASES_KEY) || '{}');
+    return stored && typeof stored === 'object' ? stored : {};
+  } catch {
+    return {};
+  }
+}
+
+function effectAliases() {
+  return parseEffectAliases(document.getElementById('effectAliases')?.value);
+}
+
+function saveEffectAliases() {
+  const productName = String(state.product?.name || '').trim();
+  if (!productName) return;
+  const store = getEffectAliasStore();
+  store[productName] = effectAliases();
+  localStorage.setItem(EFFECT_ALIASES_KEY, JSON.stringify(store));
+}
+
+function loadEffectAliases() {
+  const input = document.getElementById('effectAliases');
+  if (!input) return;
+  const productName = String(state.product?.name || '').trim();
+  input.value = (getEffectAliasStore()[productName] || []).join('，');
+}
 
 function effectCompetitors() {
   return String(state.product?.competitors || '').split(/[，,、\n]/).map(v => v.trim()).filter(Boolean);
@@ -1823,6 +1865,7 @@ async function loadEffectDashboard() {
     loadArticleHistory();
     restoreProductFromHistory();
     renderEffectProductSelector();
+    loadEffectAliases();
     let campaign = state.effectCampaign;
     if (!campaign && state.product?.name) campaign = await ensureEffectCampaign();
     renderEffectSummary(campaign || null);
@@ -1835,7 +1878,8 @@ async function loadEffectDashboard() {
     if (articleError) throw articleError;
     if (scanError) throw scanError;
     renderEffectStats(articles || [], scans || []);
-    renderEffectScans(scans || []);
+    state.effectScans = scans || [];
+    renderEffectScans(state.effectScans);
   } catch (error) {
     console.error('load effect dashboard failed', error);
   }
@@ -1865,7 +1909,7 @@ async function saveRealAiScan() {
     const response = await fetch(SERVER + '/api/effects/analyze-answer', {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ answerText, brandName: campaign.brand_name, productName: campaign.product_name, competitors: campaign.competitors || [] })
+      body: JSON.stringify({ answerText, brandName: campaign.brand_name, productName: campaign.product_name, aliases: effectAliases(), competitors: campaign.competitors || [] })
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || '分析失败');
@@ -1889,6 +1933,41 @@ async function saveRealAiScan() {
     alert('真实检测已保存');
   } catch (error) {
     alert('保存检测失败：' + error.message);
+  }
+}
+
+async function reanalyzeLatestEffectScan() {
+  if (!requireLogin()) return;
+  const scan = state.effectScans[0];
+  if (!scan) return alert('当前产品还没有检测记录');
+  try {
+    const campaign = await ensureEffectCampaign();
+    if (!campaign) return;
+    const response = await fetch(SERVER + '/api/effects/analyze-answer', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        answerText: scan.answer_text,
+        brandName: campaign.brand_name,
+        productName: campaign.product_name,
+        aliases: effectAliases(),
+        competitors: campaign.competitors || []
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || '重新分析失败');
+    const { error } = await supabaseClient.from('geo_ai_scans').update({
+      mentions_brand: data.analysis.mentionsBrand,
+      mention_count: data.analysis.mentionCount,
+      first_mention_index: data.analysis.firstMentionIndex,
+      competitors_found: data.analysis.competitorsFound,
+      sentiment: data.analysis.sentiment
+    }).eq('id', scan.id).eq('user_id', state.user.id);
+    if (error) throw error;
+    await loadEffectDashboard();
+    alert('已按当前别名重新判定最近一条记录');
+  } catch (error) {
+    alert('重新判定失败：' + error.message);
   }
 }
 

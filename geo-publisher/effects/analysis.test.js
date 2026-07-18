@@ -46,3 +46,14 @@ test('does not leak regex state between independent answers', () => {
   assert.equal(classifySentiment('推荐这个产品', true), 'recommended');
   assert.equal(classifySentiment('推荐这个产品', true), 'recommended');
 });
+
+test('counts a configured hotel alias as a brand mention', () => {
+  const result = analyzeAiAnswer({
+    answerText: '地派温泉适合情侣和偏好安静泡汤的人群。',
+    productName: '惠州龙门地派温泉酒店',
+    aliases: ['地派温泉', '龙门地派温泉'],
+  });
+
+  assert.equal(result.mentionsBrand, true);
+  assert.deepEqual(result.matchedTerms, ['地派温泉']);
+});

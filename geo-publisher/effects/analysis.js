@@ -35,9 +35,9 @@ function classifySentiment(answerText, mentionsBrand) {
   return 'neutral';
 }
 
-function analyzeAiAnswer({ answerText, brandName, productName, competitors = [] } = {}) {
+function analyzeAiAnswer({ answerText, brandName, productName, aliases = [], competitors = [] } = {}) {
   const text = normalizeText(answerText);
-  const brandTerms = uniqueTerms([brandName, productName]);
+  const brandTerms = uniqueTerms([brandName, productName, ...(Array.isArray(aliases) ? aliases : [])]);
   const matchedTerms = brandTerms.filter((term) => text.includes(term));
   const mentionCount = matchedTerms.reduce((total, term) => total + countOccurrences(text, term), 0);
   const mentionIndexes = matchedTerms.map((term) => findTerm(text, term)).filter((index) => index >= 0);

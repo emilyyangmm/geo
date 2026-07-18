@@ -256,7 +256,7 @@ app.post('/api/config', requireUser, (req, res) => {
 // ===================== AI 搜索真实回答分析 =====================
 // 只分析用户从真实 AI 平台复制回来的回答，不调用模型伪造检测结果。
 app.post('/api/effects/analyze-answer', requireUser, (req, res) => {
-  const { answerText, brandName, productName, competitors = [] } = req.body || {};
+  const { answerText, brandName, productName, aliases = [], competitors = [] } = req.body || {};
   if (!String(answerText || '').trim()) {
     return res.status(400).json({ error: '请粘贴 AI 平台实际返回的完整回答' });
   }
@@ -266,7 +266,7 @@ app.post('/api/effects/analyze-answer', requireUser, (req, res) => {
 
   res.json({
     success: true,
-    analysis: analyzeAiAnswer({ answerText, brandName, productName, competitors }),
+    analysis: analyzeAiAnswer({ answerText, brandName, productName, aliases, competitors }),
   });
 });
 
