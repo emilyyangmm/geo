@@ -943,6 +943,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="campaign-context.js"></script>
 <script>
 // ===================== State =====================
 const SUPABASE_URL = 'https://nhpelzwccvqdcstbxwvf.supabase.co';
@@ -1580,6 +1581,14 @@ function loadArticleHistory() {
   }
 }
 
+function restoreProductFromHistory() {
+  if (String(state.product?.name || '').trim()) return state.product;
+  const recovered = window.GeoCampaignContext?.pickProductFromHistory(state.history);
+  if (!recovered) return null;
+  state.product = { ...state.product, ...recovered };
+  return state.product;
+}
+
 function saveArticleHistory() {
   localStorage.setItem(HISTORY_KEY, JSON.stringify(state.history.slice(0, 80)));
 }
@@ -1651,6 +1660,7 @@ function campaignPayload() {
 
 async function ensureEffectCampaign() {
   if (!requireLogin()) return null;
+  restoreProductFromHistory();
   const payload = campaignPayload();
   if (!payload) throw new Error('请先在“产品定义”填写产品或品牌名称');
   const { data, error } = await supabaseClient
@@ -1772,6 +1782,8 @@ function renderEffectStats(articles, scans) {
 async function loadEffectDashboard() {
   if (!state.user) return;
   try {
+    loadArticleHistory();
+    restoreProductFromHistory();
     let campaign = state.effectCampaign;
     if (!campaign && state.product?.name) campaign = await ensureEffectCampaign();
     renderEffectSummary(campaign || null);
@@ -2336,6 +2348,7 @@ async function publishAll() {
 
 // 页面加载时自动检测服务
 loadArticleHistory();
+restoreProductFromHistory();
 supabaseClient.auth.onAuthStateChange((_event, session) => {
   state.user = session?.user || null;
   state.accessToken = session?.access_token || '';
