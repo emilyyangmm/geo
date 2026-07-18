@@ -912,6 +912,28 @@
       </div>
 
       <div class="card">
+        <div class="card-title"><span class="icon">🔗</span> 文章发布回溯</div>
+        <div class="hint" style="margin-bottom:12px">自动发布只会记录为“待确认”。请打开文章确认真实发布后再确认；自己发布的文章可在这里补录平台和链接。</div>
+        <div style="margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="toggleManualPublicationForm()">补录已发布文章</button>
+        </div>
+        <div id="manualPublicationForm" style="display:none;border-top:1px solid var(--border);padding-top:14px">
+          <div class="form-grid">
+            <div class="field"><label>关联文章</label><select id="publicationArticleSelect"></select></div>
+            <div class="field"><label>发布平台</label><select id="publicationPlatform"><option value="zhihu">知乎</option><option value="toutiao">今日头条</option><option value="baijiahao">百家号</option><option value="sohu">搜狐号</option><option value="wechat">微信公众号</option><option value="other">其他</option></select></div>
+          </div>
+          <div class="field" style="margin-top:12px"><label>文章标题（列表没有旧文章时填写）</label><input id="manualPublicationTitle" type="text" placeholder="例如：惠州龙门地派、云顶、富力希尔顿温泉对比怎么选" /></div>
+          <div class="form-grid" style="margin-top:12px">
+            <div class="field"><label>真实文章链接</label><input id="publicationUrl" type="url" placeholder="粘贴文章公开链接，例如 https://..." /></div>
+            <div class="field"><label>发布时间（可选）</label><input id="publicationDate" type="datetime-local" /></div>
+          </div>
+          <div style="margin-top:12px"><button class="btn btn-primary" onclick="saveManualPublication()">保存为手动已确认</button></div>
+        </div>
+        <div id="publicationEmpty" class="empty" style="padding:24px 0"><div class="empty-text">还没有发布回溯记录</div></div>
+        <div id="publicationList" class="history-list"></div>
+      </div>
+
+      <div class="card">
         <div class="card-title"><span class="icon">🧪</span> 记录一次真实 AI 搜索</div>
         <div class="form-grid">
           <div class="field">
@@ -933,7 +955,12 @@
           <div class="field">
             <label>AI 实际回答</label>
             <textarea id="effectAnswer" placeholder="粘贴该平台实际返回的完整回答，不要自行概括或改写。"></textarea>
-            <div class="hint">系统只依据这段真实回答计算，不会调用模型补写结果。</div>
+            <div class="hint">品牌被提及不等于引用你的文章，引用结果以“AI 参考来源”链接比对为准。</div>
+          </div>
+          <div class="field" style="margin-top:14px">
+            <label>AI 参考来源（推荐逐行粘贴链接）</label>
+            <textarea id="effectSourceRefs" placeholder="每行一个 AI 实际参考资料链接。只有标题时可填：知乎|文章标题；网址匹配是最可靠的引用证据。"></textarea>
+            <div class="hint">系统只会将命中“已确认发布链接”的来源计作引用；没有来源链接时会保留为“无法确认引用”。</div>
           </div>
         </div>
         <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
@@ -981,6 +1008,8 @@ const state = {
   history: [],
   effectCampaign: null,
   effectScans: [],
+  effectPublications: [],
+  effectArticles: [],
   currentFilter: 'all',
   user: null,
   accessToken: '',
@@ -1678,6 +1707,10 @@ const AI_PLATFORM_LABELS = {
   doubao: '豆包', deepseek: 'DeepSeek', kimi: 'Kimi', qianwen: '千问', wenxin: '文心一言'
 };
 
+const PUBLISH_PLATFORM_LABELS = {
+  zhihu: '知乎', toutiao: '今日头条', baijiahao: '百家号', sohu: '搜狐号', wechat: '微信公众号', other: '其他'
+};
+
 const EFFECT_ALIASES_KEY = 'geo_effect_aliases_v1';
 
 function parseEffectAliases(value) {
@@ -1765,7 +1798,7 @@ async function syncArticleToEffects(article) {
   if (!state.user || !state.product?.name || !article?.article) return;
   const campaign = await ensureEffectCampaign();
   if (!campaign) return;
-  const { error } = await supabaseClient.from('geo_articles').upsert({
+  const { data, error } = await supabaseClient.from('geo_articles').upsert({
     user_id: state.user.id,
     campaign_id: campaign.id,
     source_key: article.id,
@@ -1777,8 +1810,9 @@ async function syncArticleToEffects(article) {
     publication_links: article.publicationLinks || {},
     published_at: article.publishedAt || null,
     generated_at: article.savedAt || new Date().toISOString(),
-  }, { onConflict: 'user_id,source_key' });
+  }, { onConflict: 'user_id,source_key' }).select().single();
   if (error) throw error;
+  return data;
 }
 
 async function markArticlePublished(article, platform, url) {
@@ -1790,7 +1824,139 @@ async function markArticlePublished(article, platform, url) {
   const historyIndex = state.history.findIndex(item => item.id === article.id);
   if (historyIndex >= 0) Object.assign(state.history[historyIndex], { publishedPlatforms, publicationLinks, publishedAt });
   saveArticleHistory();
-  await syncArticleToEffects(article);
+  const effectArticle = await syncArticleToEffects(article);
+  if (effectArticle) await recordArticlePublication({
+    article: effectArticle,
+    platform,
+    publishedUrl: url,
+    source: 'automatic',
+    status: 'pending_confirmation',
+    publishedAt
+  });
+}
+
+async function recordArticlePublication({ article, platform, publishedUrl, source, status, publishedAt }) {
+  const { error } = await supabaseClient.from('geo_article_publications').upsert({
+    user_id: state.user.id,
+    article_id: article.id,
+    platform,
+    article_title: article.title || '',
+    published_url: String(publishedUrl || '').trim(),
+    source,
+    status,
+    published_at: publishedAt || new Date().toISOString(),
+    confirmed_at: status === 'confirmed' || status === 'manual' ? new Date().toISOString() : null
+  }, { onConflict: 'user_id,article_id,platform,published_url' });
+  if (error) throw error;
+}
+
+async function importLegacyArticlePublications(historyArticle, effectArticle) {
+  const links = historyArticle?.publicationLinks || {};
+  const platforms = [...new Set([...(historyArticle?.publishedPlatforms || []), ...Object.keys(links)])];
+  for (const platform of platforms) {
+    const publishedUrl = String(links[platform] || '').trim();
+    if (!publishedUrl) continue;
+    await recordArticlePublication({
+      article: effectArticle,
+      platform,
+      publishedUrl,
+      source: 'automatic',
+      status: 'pending_confirmation',
+      publishedAt: historyArticle.publishedAt || historyArticle.savedAt
+    });
+  }
+}
+
+function publicationStatusLabel(publication) {
+  if (publication.status === 'confirmed') return '已确认发布';
+  if (publication.status === 'manual') return '手动已确认';
+  return publication.published_url ? '待确认发布' : '待补发布链接';
+}
+
+function renderPublicationArticleOptions() {
+  const target = document.getElementById('publicationArticleSelect');
+  if (!target) return;
+  target.innerHTML = '<option value="">手动填写下方文章标题</option>' + state.effectArticles.map(article => `<option value="${article.id}">${escapeHTML(article.title || '未命名文章')}</option>`).join('');
+}
+
+function renderEffectPublications(publications) {
+  const empty = document.getElementById('publicationEmpty');
+  const list = document.getElementById('publicationList');
+  if (!empty || !list) return;
+  renderPublicationArticleOptions();
+  if (!publications.length) {
+    empty.style.display = 'block';
+    list.innerHTML = '';
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = publications.map(publication => {
+    const confirmed = publication.status === 'confirmed' || publication.status === 'manual';
+    const statusClass = confirmed ? 'tag-green' : 'tag-yellow';
+    const platform = PUBLISH_PLATFORM_LABELS[publication.platform] || publication.platform;
+    const url = String(publication.published_url || '').trim();
+    return `<div class="history-item"><div style="flex:1;min-width:0"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><strong>${escapeHTML(publication.article_title || '未命名文章')}</strong><span class="tag tag-blue">${escapeHTML(platform)}</span><span class="tag ${statusClass}">${publicationStatusLabel(publication)}</span></div><div style="font-size:12px;color:var(--muted);margin-top:6px;word-break:break-all">${url ? `<a href="${escapeHTML(url)}" target="_blank" rel="noopener">${escapeHTML(url)}</a>` : '尚未填写真实发布链接'}</div></div>${confirmed ? '' : `<button class="btn btn-sm" onclick="confirmPublication('${publication.id}')">确认已发布</button>`}</div>`;
+  }).join('');
+}
+
+function toggleManualPublicationForm() {
+  const form = document.getElementById('manualPublicationForm');
+  if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+async function confirmPublication(publicationId) {
+  const publication = state.effectPublications.find(item => item.id === publicationId);
+  if (!publication) return;
+  if (!String(publication.published_url || '').trim()) return alert('请先补录真实文章链接，再确认发布');
+  try {
+    const { error } = await supabaseClient.from('geo_article_publications').update({
+      status: 'confirmed', confirmed_at: new Date().toISOString(), updated_at: new Date().toISOString()
+    }).eq('id', publicationId).eq('user_id', state.user.id);
+    if (error) throw error;
+    await loadEffectDashboard();
+  } catch (error) {
+    alert('确认发布失败：' + error.message);
+  }
+}
+
+async function saveManualPublication() {
+  if (!requireLogin()) return;
+  const articleId = document.getElementById('publicationArticleSelect').value;
+  const platform = document.getElementById('publicationPlatform').value;
+  const publishedUrl = document.getElementById('publicationUrl').value.trim();
+  const publishedDate = document.getElementById('publicationDate').value;
+  const manualTitle = document.getElementById('manualPublicationTitle').value.trim();
+  let article = state.effectArticles.find(item => item.id === articleId);
+  if (!article && manualTitle) article = await createManualEffectArticle(manualTitle);
+  if (!article || !publishedUrl) return alert('请选择关联文章或填写文章标题，并填写真实文章链接');
+  try {
+    await recordArticlePublication({ article, platform, publishedUrl, source: 'manual', status: 'manual', publishedAt: publishedDate ? new Date(publishedDate).toISOString() : new Date().toISOString() });
+    document.getElementById('publicationUrl').value = '';
+    document.getElementById('publicationDate').value = '';
+    document.getElementById('manualPublicationTitle').value = '';
+    await loadEffectDashboard();
+    alert('手动发布记录已保存');
+  } catch (error) {
+    alert('保存发布记录失败：' + error.message);
+  }
+}
+
+async function createManualEffectArticle(title) {
+  const campaign = await ensureEffectCampaign();
+  if (!campaign) return null;
+  const sourceKey = `manual-${campaign.id}-${title.trim().toLowerCase().replace(/\s+/g, '-')}`;
+  const { data, error } = await supabaseClient.from('geo_articles').upsert({
+    user_id: state.user.id,
+    campaign_id: campaign.id,
+    source_key: sourceKey,
+    title,
+    content: '',
+    summary: '',
+    tags: [],
+    generated_at: new Date().toISOString()
+  }, { onConflict: 'user_id,source_key' }).select().single();
+  if (error) throw error;
+  return data;
 }
 
 async function syncHistoryToEffects() {
@@ -1803,7 +1969,10 @@ async function syncHistoryToEffects() {
   try {
     const campaign = await ensureEffectCampaign();
     if (!campaign) return;
-    for (const article of productArticles) await syncArticleToEffects(article);
+    for (const article of productArticles) {
+      const effectArticle = await syncArticleToEffects(article);
+      if (effectArticle) await importLegacyArticlePublications(article, effectArticle);
+    }
     alert(`已同步“${productName}”的 ${productArticles.length} 篇文章历史`);
     await loadEffectDashboard();
   } catch (error) {
@@ -1841,22 +2010,24 @@ function renderEffectScans(scans) {
   list.innerHTML = scans.map(scan => {
     const sentimentLabel = { recommended: '明确推荐', positive: '正向提及', neutral: '中性提及', negative: '负面提及', unknown: '未提及' }[scan.sentiment] || '待判断';
     const sentimentClass = scan.sentiment === 'negative' ? 'tag-red' : scan.mentions_brand ? 'tag-green' : 'tag-gray';
-    return `<div class="history-item"><div style="flex:1;min-width:0"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><strong>${escapeHTML(AI_PLATFORM_LABELS[scan.platform] || scan.platform)}</strong><span class="tag ${sentimentClass}">${sentimentLabel}</span><span class="tag tag-blue">${scan.mentions_brand ? '提及品牌/产品' : '未提及品牌/产品'}</span></div><div style="font-size:12px;color:var(--muted);margin-top:6px">问题：${escapeHTML(scan.question || '未记录')} · ${new Date(scan.created_at).toLocaleString('zh-CN')}</div><div style="font-size:12px;color:var(--muted);margin-top:5px;line-height:1.7">证据：${escapeHTML((scan.answer_text || '').slice(0, 240))}${(scan.answer_text || '').length > 240 ? '…' : ''}</div></div></div>`;
+    const citationCount = Number(scan.cited_publication_count || 0);
+    const citationLabel = citationCount ? `引用我们的文章 ${citationCount} 条` : '未确认引用我们的文章';
+    return `<div class="history-item"><div style="flex:1;min-width:0"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><strong>${escapeHTML(AI_PLATFORM_LABELS[scan.platform] || scan.platform)}</strong><span class="tag ${citationCount ? 'tag-green' : 'tag-gray'}">${citationLabel}</span><span class="tag ${sentimentClass}">${sentimentLabel}</span><span class="tag tag-blue">${scan.mentions_brand ? '提及品牌/产品' : '未提及品牌/产品'}</span></div><div style="font-size:12px;color:var(--muted);margin-top:6px">问题：${escapeHTML(scan.question || '未记录')} · ${new Date(scan.created_at).toLocaleString('zh-CN')}</div><div style="font-size:12px;color:var(--muted);margin-top:5px;line-height:1.7">证据：${escapeHTML((scan.answer_text || '').slice(0, 240))}${(scan.answer_text || '').length > 240 ? '…' : ''}</div></div></div>`;
   }).join('');
 }
 
-function renderEffectStats(articles, scans) {
+function renderEffectStats(articles, publications, scans) {
   const target = document.getElementById('effectStats');
   if (!target) return;
-  const published = articles.filter(article => article.published_at).length;
+  const confirmedPublications = publications.filter(item => item.status === 'confirmed' || item.status === 'manual');
   const completedScans = scans.filter(scan => scan.status === 'success');
-  const mentioned = completedScans.filter(scan => scan.mentions_brand).length;
-  const visibility = completedScans.length ? `${Math.round(mentioned / completedScans.length * 100)}%` : '-';
+  const citedScans = completedScans.filter(scan => Number(scan.cited_publication_count || 0) > 0).length;
+  const citationRate = completedScans.length ? `${Math.round(citedScans / completedScans.length * 100)}%` : '-';
   target.innerHTML = `
     <div class="stat-card"><div class="stat-num">${articles.length}</div><div class="stat-label">已生成文章</div></div>
-    <div class="stat-card"><div class="stat-num">${published}</div><div class="stat-label">已发布记录</div></div>
+    <div class="stat-card"><div class="stat-num">${confirmedPublications.length}</div><div class="stat-label">已确认发布链接</div></div>
     <div class="stat-card"><div class="stat-num">${completedScans.length}</div><div class="stat-label">真实检测次数</div></div>
-    <div class="stat-card"><div class="stat-num">${visibility}</div><div class="stat-label">被提及比例</div></div>`;
+    <div class="stat-card"><div class="stat-num">${citationRate}</div><div class="stat-label">AI 引用率</div></div>`;
 }
 
 async function loadEffectDashboard() {
@@ -1870,14 +2041,24 @@ async function loadEffectDashboard() {
     if (!campaign && state.product?.name) campaign = await ensureEffectCampaign();
     renderEffectSummary(campaign || null);
     prefillEffectQuestion(campaign || null);
-    if (!campaign) return renderEffectStats([], []);
+    if (!campaign) return renderEffectStats([], [], []);
     const [{ data: articles, error: articleError }, { data: scans, error: scanError }] = await Promise.all([
-      supabaseClient.from('geo_articles').select('id,published_at').eq('campaign_id', campaign.id),
+      supabaseClient.from('geo_articles').select('id,title,published_at').eq('campaign_id', campaign.id),
       supabaseClient.from('geo_ai_scans').select('*').eq('campaign_id', campaign.id).order('created_at', { ascending: false }).limit(50)
     ]);
     if (articleError) throw articleError;
     if (scanError) throw scanError;
-    renderEffectStats(articles || [], scans || []);
+    let publications = [];
+    const articleIds = (articles || []).map(item => item.id);
+    if (articleIds.length) {
+      const { data, error } = await supabaseClient.from('geo_article_publications').select('*').in('article_id', articleIds).order('created_at', { ascending: false });
+      if (error) throw error;
+      publications = data || [];
+    }
+    state.effectArticles = articles || [];
+    state.effectPublications = publications;
+    renderEffectStats(state.effectArticles, state.effectPublications, scans || []);
+    renderEffectPublications(state.effectPublications);
     state.effectScans = scans || [];
     renderEffectScans(state.effectScans);
   } catch (error) {
@@ -1897,11 +2078,21 @@ async function copyEffectQuestion() {
   alert('问题已复制，请粘贴到对应 AI 平台提问');
 }
 
+function parseEffectSourceRefs(value) {
+  const platformNames = { '知乎': 'zhihu', '头条': 'toutiao', '今日头条': 'toutiao', '百家号': 'baijiahao', '搜狐': 'sohu', '搜狐号': 'sohu', '公众号': 'wechat', '微信公众号': 'wechat' };
+  return String(value || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => {
+    if (/^https?:\/\//i.test(line)) return { url: line, title: '', platform: '' };
+    const parts = line.split(/[|｜]/).map(item => item.trim());
+    return { url: '', platform: platformNames[parts[0]] || '', title: parts.length > 1 ? parts.slice(1).join(' ') : line };
+  });
+}
+
 async function saveRealAiScan() {
   if (!requireLogin()) return;
   const platform = document.getElementById('effectPlatform').value;
   const question = document.getElementById('effectQuestion').value.trim();
   const answerText = document.getElementById('effectAnswer').value.trim();
+  const sourceRefs = parseEffectSourceRefs(document.getElementById('effectSourceRefs').value);
   if (!question || !answerText) return alert('请填写问题并粘贴 AI 实际回答');
   try {
     const campaign = await ensureEffectCampaign();
@@ -1913,6 +2104,13 @@ async function saveRealAiScan() {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || '分析失败');
+    const matchResponse = await fetch(SERVER + '/api/effects/match-sources', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ publications: state.effectPublications, sourceRefs })
+    });
+    const matchData = await matchResponse.json();
+    if (!matchResponse.ok) throw new Error(matchData.error || '引用比对失败');
     const { error } = await supabaseClient.from('geo_ai_scans').insert({
       user_id: state.user.id,
       campaign_id: campaign.id,
@@ -1925,10 +2123,14 @@ async function saveRealAiScan() {
       mention_count: data.analysis.mentionCount,
       first_mention_index: data.analysis.firstMentionIndex,
       competitors_found: data.analysis.competitorsFound,
-      sentiment: data.analysis.sentiment
+      sentiment: data.analysis.sentiment,
+      source_refs: sourceRefs,
+      citation_matches: matchData.analysis.matches,
+      cited_publication_count: matchData.analysis.citedPublicationCount
     });
     if (error) throw error;
     document.getElementById('effectAnswer').value = '';
+    document.getElementById('effectSourceRefs').value = '';
     await loadEffectDashboard();
     alert('真实检测已保存');
   } catch (error) {

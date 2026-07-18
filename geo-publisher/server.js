@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const { analyzeAiAnswer } = require('./effects/analysis');
+const { matchPublicationSources } = require('./effects/citation');
 
 const app = express();
 app.use((req, res, next) => {
@@ -268,6 +269,15 @@ app.post('/api/effects/analyze-answer', requireUser, (req, res) => {
     success: true,
     analysis: analyzeAiAnswer({ answerText, brandName, productName, aliases, competitors }),
   });
+});
+
+// 只对用户粘贴的真实 AI 参考资料做确定性比对：已确认发布的网址命中后，才记为引用。
+app.post('/api/effects/match-sources', requireUser, (req, res) => {
+  const { publications = [], sourceRefs = [] } = req.body || {};
+  if (!Array.isArray(publications) || !Array.isArray(sourceRefs)) {
+    return res.status(400).json({ error: '发布记录和 AI 参考来源必须是数组' });
+  }
+  res.json({ success: true, analysis: matchPublicationSources({ publications, sourceRefs }) });
 });
 
 // ===================== 清除某平台 Cookie（强制重新登录） =====================
