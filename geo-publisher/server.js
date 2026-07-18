@@ -9,6 +9,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const { analyzeAiAnswer } = require('./effects/analysis');
 
 const app = express();
 app.use((req, res, next) => {
@@ -252,6 +253,23 @@ app.post('/api/config', requireUser, (req, res) => {
   res.json({ success: true });
 });
 
+// ===================== AI 搜索真实回答分析 =====================
+// 只分析用户从真实 AI 平台复制回来的回答，不调用模型伪造检测结果。
+app.post('/api/effects/analyze-answer', requireUser, (req, res) => {
+  const { answerText, brandName, productName, competitors = [] } = req.body || {};
+  if (!String(answerText || '').trim()) {
+    return res.status(400).json({ error: '请粘贴 AI 平台实际返回的完整回答' });
+  }
+  if (!String(brandName || productName || '').trim()) {
+    return res.status(400).json({ error: '请先填写品牌名称或产品名称' });
+  }
+
+  res.json({
+    success: true,
+    analysis: analyzeAiAnswer({ answerText, brandName, productName, competitors }),
+  });
+});
+
 // ===================== 清除某平台 Cookie（强制重新登录） =====================
 app.delete('/api/cookies/:platform', requireUser, (req, res) => {
   const cookiePath = path.join(getUserDir(req.user.id), `${req.params.platform}.json`);
@@ -403,7 +421,7 @@ app.get('/api/job/:jobId', (req, res) => {
 });
 
 // ===================== 启动 =====================
-const PORT = 3001;
+const PORT = Number(process.env.PORT || 3001);
 app.listen(PORT, () => {
   console.log(`\n🚀 GEO Publisher 已启动: http://localhost:${PORT}`);
   console.log(`📁 配置文件: ${CONFIG_PATH}`);

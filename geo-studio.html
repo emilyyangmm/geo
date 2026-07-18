@@ -430,6 +430,9 @@
       <li><a href="#" onclick="goPage(7,this)" id="nav7">
         <div class="step-num" style="font-size:9px">史</div> 文章历史
       </a></li>
+      <li><a href="#" onclick="goPage(8,this)" id="nav8">
+        <div class="step-num" style="font-size:9px">AI</div> 投放效果
+      </a></li>
       <li><a href="#" onclick="goPage(6,this)" id="nav6">
         <div class="step-num" style="font-size:9px">🚀</div> 一键发布
       </a></li>
@@ -763,21 +766,6 @@
             </div>
           </div>
 
-          <!-- 今日头条 -->
-          <div class="platform-cred-row" data-platform="toutiao" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-              <span style="font-size:14px">📰</span>
-              <strong style="font-size:13px">今日头条号</strong>
-              <span class="tag tag-yellow" style="font-size:10px">豆包首选</span>
-              <div class="status-dot" id="cred-dot-toutiao" style="margin-left:auto"></div>
-              <span id="cred-status-toutiao" style="font-size:11px;color:var(--text3)">未配置</span>
-            </div>
-            <div class="form-grid" style="margin-bottom:10px">
-              <div class="field"><label>头条 Cookie</label><textarea class="cred-cookie" placeholder="粘贴头条 Cookie，支持 name=value; name2=value2 或 JSON 数组"></textarea></div>
-              <div class="field" style="justify-content:end"><button class="btn btn-primary btn-sm" onclick="saveRowCookie('toutiao')">保存头条 Cookie</button><div class="hint">保存后状态会变成“已配置”</div></div>
-            </div>
-          </div>
-
           <!-- 百家号 -->
           <div class="platform-cred-row" data-platform="baijiahao" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
@@ -847,7 +835,6 @@
           <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
             <div style="font-size:13px;color:var(--text2);margin-right:auto;align-self:center">选择要发布到的平台：</div>
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="pub-platform-check" value="zhihu" checked> 知乎</label>
-            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="pub-platform-check" value="toutiao" checked> 头条</label>
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="pub-platform-check" value="baijiahao"> 百家号</label>
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="pub-platform-check" value="sohu"> 搜狐</label>
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" class="pub-platform-check" value="wechat"> 公众号</label>
@@ -887,6 +874,71 @@
       </div>
     </div>
 
+    <!-- Page 8: AI Search Effect Tracking -->
+    <div class="page" id="page8">
+      <div class="page-title">🔎 投放效果</div>
+      <div class="page-desc">只记录真实 AI 平台回答和已生成文章。这里不会生成虚假的阅读量、引用量或推荐结论。</div>
+
+      <div class="notice">
+        <span>提示：</span><span>先在豆包、DeepSeek、Kimi、千问或文心一言中提出同一个问题，再把完整回答粘贴回来。系统会保存检测证据，并判断是否提到你的产品、推荐倾向及竞品出现情况。</span>
+      </div>
+
+      <div class="stats-row" id="effectStats">
+        <div class="stat-card"><div class="stat-num">-</div><div class="stat-label">已生成文章</div></div>
+        <div class="stat-card"><div class="stat-num">-</div><div class="stat-label">已发布记录</div></div>
+        <div class="stat-card"><div class="stat-num">-</div><div class="stat-label">真实检测次数</div></div>
+        <div class="stat-card"><div class="stat-num">-</div><div class="stat-label">被提及比例</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span class="icon">🎯</span> 当前投放对象</div>
+        <div id="effectCampaignSummary" style="color:var(--muted);font-size:13px;line-height:1.8">请先在“产品定义”填写产品信息，然后点击“同步当前产品”。</div>
+        <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="syncCurrentCampaign()">同步当前产品</button>
+          <button class="btn btn-sm" onclick="syncHistoryToEffects()">同步本地文章历史</button>
+          <button class="btn btn-sm" onclick="loadEffectDashboard()">刷新数据</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span class="icon">🧪</span> 记录一次真实 AI 搜索</div>
+        <div class="form-grid">
+          <div class="field">
+            <label>AI 平台</label>
+            <select id="effectPlatform">
+              <option value="doubao">豆包</option>
+              <option value="deepseek">DeepSeek</option>
+              <option value="kimi">Kimi</option>
+              <option value="qianwen">千问</option>
+              <option value="wenxin">文心一言</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>提问关键词 / 问题</label>
+            <input id="effectQuestion" type="text" placeholder="例如：XX 怎么选？" />
+          </div>
+        </div>
+        <div class="form-grid full" style="margin-top:16px">
+          <div class="field">
+            <label>AI 实际回答</label>
+            <textarea id="effectAnswer" placeholder="粘贴该平台实际返回的完整回答，不要自行概括或改写。"></textarea>
+            <div class="hint">系统只依据这段真实回答计算，不会调用模型补写结果。</div>
+          </div>
+        </div>
+        <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn" onclick="openSelectedAiPlatform()">打开 AI 平台</button>
+          <button class="btn btn-sm" onclick="copyEffectQuestion()">复制问题</button>
+          <button class="btn btn-primary" onclick="saveRealAiScan()">保存真实检测</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span class="icon">📋</span> 检测记录</div>
+        <div id="effectScanEmpty" class="empty" style="padding:32px 0"><div class="empty-icon">🔍</div><div class="empty-text">还没有真实检测记录</div></div>
+        <div id="effectScanList" class="history-list"></div>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -914,6 +966,7 @@ const state = {
   keywords: [],
   articles: [],
   history: [],
+  effectCampaign: null,
   currentFilter: 'all',
   user: null,
   accessToken: '',
@@ -1509,7 +1562,7 @@ function buildFallbackArticle(idx, error) {
 
 ### 和${competitors}相比要看什么？
 重点看真实使用场景、长期成本和服务边界，不要只看单点功能。`;
-  art.platforms = ['知乎', '今日头条', '百家号'];
+  art.platforms = ['知乎', '百家号', '搜狐号'];
   art.tags = [category, productName, '选购指南', '对比推荐', '避坑指南'].filter(Boolean);
   art.error = error?.message || '';
   saveArticleToHistory(art);
@@ -1541,6 +1594,9 @@ function normalizeHistoryArticle(art) {
     summary: art.summary || '',
     article: art.article || '',
     platforms: art.platforms || [],
+    publishedPlatforms: art.publishedPlatforms || [],
+    publicationLinks: art.publicationLinks || {},
+    publishedAt: art.publishedAt || null,
     tags: art.tags || [],
     status: 'done',
   };
@@ -1549,10 +1605,240 @@ function normalizeHistoryArticle(art) {
 function saveArticleToHistory(art) {
   if (!art?.article) return;
   const item = normalizeHistoryArticle(art);
+  art.id = item.id;
   const sameIndex = state.history.findIndex(h => h.title === item.title && h.article === item.article);
   if (sameIndex >= 0) state.history.splice(sameIndex, 1);
   state.history.unshift(item);
   saveArticleHistory();
+  syncArticleToEffects(item).catch(() => {});
+}
+
+// ===================== 投放效果：产品、文章与真实 AI 回答 =====================
+const AI_PLATFORM_LINKS = {
+  doubao: 'https://www.doubao.com/chat/',
+  deepseek: 'https://chat.deepseek.com/',
+  kimi: 'https://kimi.moonshot.cn/',
+  qianwen: 'https://tongyi.aliyun.com/qianwen/',
+  wenxin: 'https://yiyan.baidu.com/'
+};
+
+const AI_PLATFORM_LABELS = {
+  doubao: '豆包', deepseek: 'DeepSeek', kimi: 'Kimi', qianwen: '千问', wenxin: '文心一言'
+};
+
+function effectCompetitors() {
+  return String(state.product?.competitors || '').split(/[，,、\n]/).map(v => v.trim()).filter(Boolean);
+}
+
+function effectKeywords() {
+  return state.keywords.map(item => item.query).filter(Boolean).slice(0, 30);
+}
+
+function campaignPayload() {
+  const productName = String(state.product?.name || '').trim();
+  if (!productName) return null;
+  return {
+    user_id: state.user.id,
+    brand_name: productName,
+    product_name: productName,
+    website: '',
+    selling_points: state.product?.features || state.product?.uniqueValue || '',
+    keywords: effectKeywords(),
+    competitors: effectCompetitors(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+async function ensureEffectCampaign() {
+  if (!requireLogin()) return null;
+  const payload = campaignPayload();
+  if (!payload) throw new Error('请先在“产品定义”填写产品或品牌名称');
+  const { data, error } = await supabaseClient
+    .from('geo_campaigns')
+    .upsert(payload, { onConflict: 'user_id,brand_name,product_name' })
+    .select()
+    .single();
+  if (error) throw error;
+  state.effectCampaign = data;
+  return data;
+}
+
+async function syncCurrentCampaign() {
+  try {
+    const campaign = await ensureEffectCampaign();
+    if (!campaign) return;
+    alert('当前产品已同步到投放效果看板');
+    await loadEffectDashboard();
+  } catch (error) {
+    alert('同步产品失败：' + error.message);
+  }
+}
+
+async function syncArticleToEffects(article) {
+  if (!state.user || !state.product?.name || !article?.article) return;
+  const campaign = await ensureEffectCampaign();
+  if (!campaign) return;
+  const { error } = await supabaseClient.from('geo_articles').upsert({
+    user_id: state.user.id,
+    campaign_id: campaign.id,
+    source_key: article.id,
+    title: article.title || '',
+    content: article.article || '',
+    summary: article.summary || '',
+    tags: article.tags || [],
+    published_platforms: article.publishedPlatforms || [],
+    publication_links: article.publicationLinks || {},
+    published_at: article.publishedAt || null,
+    generated_at: article.savedAt || new Date().toISOString(),
+  }, { onConflict: 'user_id,source_key' });
+  if (error) throw error;
+}
+
+async function markArticlePublished(article, platform, url) {
+  if (!article?.id) return;
+  const publishedPlatforms = [...new Set([...(article.publishedPlatforms || []), platform])];
+  const publicationLinks = { ...(article.publicationLinks || {}), [platform]: url || '' };
+  const publishedAt = article.publishedAt || new Date().toISOString();
+  Object.assign(article, { publishedPlatforms, publicationLinks, publishedAt });
+  const historyIndex = state.history.findIndex(item => item.id === article.id);
+  if (historyIndex >= 0) Object.assign(state.history[historyIndex], { publishedPlatforms, publicationLinks, publishedAt });
+  saveArticleHistory();
+  await syncArticleToEffects(article);
+}
+
+async function syncHistoryToEffects() {
+  if (!requireLogin()) return;
+  loadArticleHistory();
+  if (!state.history.length) return alert('当前没有可同步的文章历史');
+  try {
+    const campaign = await ensureEffectCampaign();
+    if (!campaign) return;
+    for (const article of state.history) await syncArticleToEffects(article);
+    alert(`已同步 ${state.history.length} 篇本地文章历史`);
+    await loadEffectDashboard();
+  } catch (error) {
+    alert('同步文章失败：' + error.message);
+  }
+}
+
+function renderEffectSummary(campaign) {
+  const target = document.getElementById('effectCampaignSummary');
+  if (!target) return;
+  if (!campaign) {
+    target.textContent = '请先在“产品定义”填写产品信息，然后点击“同步当前产品”。';
+    return;
+  }
+  const keywordText = (campaign.keywords || []).slice(0, 8).join('、') || '尚未生成关键词';
+  target.innerHTML = `<strong>${escapeHTML(campaign.brand_name)}</strong> · ${escapeHTML(campaign.product_name)}<br>关键词：${escapeHTML(keywordText)}<br>竞品：${escapeHTML((campaign.competitors || []).join('、') || '未填写')}`;
+}
+
+function prefillEffectQuestion(campaign) {
+  const field = document.getElementById('effectQuestion');
+  if (!field || field.value.trim() || !campaign) return;
+  field.value = (campaign.keywords || [])[0] || `${campaign.product_name} 怎么选？`;
+}
+
+function renderEffectScans(scans) {
+  const empty = document.getElementById('effectScanEmpty');
+  const list = document.getElementById('effectScanList');
+  if (!list || !empty) return;
+  if (!scans.length) {
+    empty.style.display = 'block';
+    list.innerHTML = '';
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = scans.map(scan => {
+    const sentimentLabel = { recommended: '明确推荐', positive: '正向提及', neutral: '中性提及', negative: '负面提及', unknown: '未提及' }[scan.sentiment] || '待判断';
+    const sentimentClass = scan.sentiment === 'negative' ? 'tag-red' : scan.mentions_brand ? 'tag-green' : 'tag-gray';
+    return `<div class="history-item"><div style="flex:1;min-width:0"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><strong>${escapeHTML(AI_PLATFORM_LABELS[scan.platform] || scan.platform)}</strong><span class="tag ${sentimentClass}">${sentimentLabel}</span><span class="tag tag-blue">${scan.mentions_brand ? '提及品牌/产品' : '未提及品牌/产品'}</span></div><div style="font-size:12px;color:var(--muted);margin-top:6px">问题：${escapeHTML(scan.question || '未记录')} · ${new Date(scan.created_at).toLocaleString('zh-CN')}</div><div style="font-size:12px;color:var(--muted);margin-top:5px;line-height:1.7">证据：${escapeHTML((scan.answer_text || '').slice(0, 240))}${(scan.answer_text || '').length > 240 ? '…' : ''}</div></div></div>`;
+  }).join('');
+}
+
+function renderEffectStats(articles, scans) {
+  const target = document.getElementById('effectStats');
+  if (!target) return;
+  const published = articles.filter(article => article.published_at).length;
+  const completedScans = scans.filter(scan => scan.status === 'success');
+  const mentioned = completedScans.filter(scan => scan.mentions_brand).length;
+  const visibility = completedScans.length ? `${Math.round(mentioned / completedScans.length * 100)}%` : '-';
+  target.innerHTML = `
+    <div class="stat-card"><div class="stat-num">${articles.length}</div><div class="stat-label">已生成文章</div></div>
+    <div class="stat-card"><div class="stat-num">${published}</div><div class="stat-label">已发布记录</div></div>
+    <div class="stat-card"><div class="stat-num">${completedScans.length}</div><div class="stat-label">真实检测次数</div></div>
+    <div class="stat-card"><div class="stat-num">${visibility}</div><div class="stat-label">被提及比例</div></div>`;
+}
+
+async function loadEffectDashboard() {
+  if (!state.user) return;
+  try {
+    let campaign = state.effectCampaign;
+    if (!campaign && state.product?.name) campaign = await ensureEffectCampaign();
+    renderEffectSummary(campaign || null);
+    prefillEffectQuestion(campaign || null);
+    if (!campaign) return renderEffectStats([], []);
+    const [{ data: articles, error: articleError }, { data: scans, error: scanError }] = await Promise.all([
+      supabaseClient.from('geo_articles').select('id,published_at').eq('campaign_id', campaign.id),
+      supabaseClient.from('geo_ai_scans').select('*').eq('campaign_id', campaign.id).order('created_at', { ascending: false }).limit(50)
+    ]);
+    if (articleError) throw articleError;
+    if (scanError) throw scanError;
+    renderEffectStats(articles || [], scans || []);
+    renderEffectScans(scans || []);
+  } catch (error) {
+    console.error('load effect dashboard failed', error);
+  }
+}
+
+function openSelectedAiPlatform() {
+  const platform = document.getElementById('effectPlatform').value;
+  window.open(AI_PLATFORM_LINKS[platform], '_blank', 'noopener');
+}
+
+async function copyEffectQuestion() {
+  const question = document.getElementById('effectQuestion').value.trim();
+  if (!question) return alert('请先填写要检测的问题');
+  await navigator.clipboard.writeText(question);
+  alert('问题已复制，请粘贴到对应 AI 平台提问');
+}
+
+async function saveRealAiScan() {
+  if (!requireLogin()) return;
+  const platform = document.getElementById('effectPlatform').value;
+  const question = document.getElementById('effectQuestion').value.trim();
+  const answerText = document.getElementById('effectAnswer').value.trim();
+  if (!question || !answerText) return alert('请填写问题并粘贴 AI 实际回答');
+  try {
+    const campaign = await ensureEffectCampaign();
+    if (!campaign) return;
+    const response = await fetch(SERVER + '/api/effects/analyze-answer', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ answerText, brandName: campaign.brand_name, productName: campaign.product_name, competitors: campaign.competitors || [] })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || '分析失败');
+    const { error } = await supabaseClient.from('geo_ai_scans').insert({
+      user_id: state.user.id,
+      campaign_id: campaign.id,
+      platform,
+      keyword: question,
+      question,
+      status: 'success',
+      answer_text: answerText,
+      mentions_brand: data.analysis.mentionsBrand,
+      mention_count: data.analysis.mentionCount,
+      first_mention_index: data.analysis.firstMentionIndex,
+      competitors_found: data.analysis.competitorsFound,
+      sentiment: data.analysis.sentiment
+    });
+    if (error) throw error;
+    document.getElementById('effectAnswer').value = '';
+    await loadEffectDashboard();
+    alert('真实检测已保存');
+  } catch (error) {
+    alert('保存检测失败：' + error.message);
+  }
 }
 
 function renderHistoryPage() {
@@ -1748,6 +2034,7 @@ window.goPage = function(n, el) {
   if (n === 4) updateExportPage();
   if (n === 6) { updatePublishQueue(); checkServer(); loadCredentialsFromServer(); }
   if (n === 7) renderHistoryPage();
+  if (n === 8) loadEffectDashboard();
   return _origGoPage(n, el);
 }
 
@@ -1776,7 +2063,7 @@ function setPlatformConfigured(platform, configured) {
 
 function syncPlatformStatus(configured = []) {
   const set = new Set(configured);
-  ['zhihu', 'toutiao', 'baijiahao', 'sohu', 'wechat'].forEach(platform => {
+  ['zhihu', 'baijiahao', 'sohu', 'wechat'].forEach(platform => {
     setPlatformConfigured(platform, set.has(platform));
   });
 }
@@ -1805,7 +2092,7 @@ async function loadCredentialsFromServer() {
     const res = await fetch(SERVER + '/api/config', { headers: authHeaders() });
     const data = await res.json();
     const platforms = data.platforms || {};
-    const map = { zhihu: 'zhihu', toutiao: 'toutiao', baijiahao: 'baijiahao', sohu: 'sohu', wechat: 'wechat' };
+    const map = { zhihu: 'zhihu', baijiahao: 'baijiahao', sohu: 'sohu', wechat: 'wechat' };
     for (const [p] of Object.entries(map)) {
       const creds = platforms[p];
       const dot = document.getElementById('cred-dot-' + p);
@@ -1894,7 +2181,7 @@ async function saveRowCookie(platform) {
 // 清除 Cookie 缓存
 async function clearCookies() {
   if (!requireLogin()) return;
-  const platforms = ['zhihu', 'toutiao', 'baijiahao', 'sohu'];
+  const platforms = ['zhihu', 'baijiahao', 'sohu'];
   if (!confirm(`将清除所有平台的登录缓存（${platforms.join(', ')}），下次发布需重新登录，确认吗？`)) return;
   try {
     await Promise.all(platforms.map(p => fetch(SERVER + '/api/cookies/' + p, { method: 'DELETE', headers: authHeaders() })));
@@ -1988,6 +2275,7 @@ async function publishSingle(idx) {
       // 轮询任务状态
       const result = await pollJob(jobId, addToLog);
       if (result?.manual) hasManual = true;
+      else await markArticlePublished(art, platform, result?.url || '');
     } catch (e) {
       hasFailure = true;
       addToLog(`❌ ${platform} 发布失败：${e.message}`);
