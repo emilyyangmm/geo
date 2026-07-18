@@ -1927,9 +1927,16 @@ async function saveManualPublication() {
   const publishedDate = document.getElementById('publicationDate').value;
   const manualTitle = document.getElementById('manualPublicationTitle').value.trim();
   let article = state.effectArticles.find(item => item.id === articleId);
-  if (!article && manualTitle) article = await createManualEffectArticle(manualTitle);
-  if (!article || !publishedUrl) return alert('请选择关联文章或填写文章标题，并填写真实文章链接');
+  if (!publishedUrl) return alert('请填写真实文章链接');
   try {
+    const url = new URL(publishedUrl);
+    if (!['http:', 'https:'].includes(url.protocol)) throw new Error('链接必须以 http:// 或 https:// 开头');
+  } catch (error) {
+    return alert('文章链接格式不正确：' + error.message);
+  }
+  try {
+    if (!article && manualTitle) article = await createManualEffectArticle(manualTitle);
+    if (!article) throw new Error('请选择关联文章，或填写文章标题后再保存。若提示未同步产品，请先点击“同步当前产品”。');
     await recordArticlePublication({ article, platform, publishedUrl, source: 'manual', status: 'manual', publishedAt: publishedDate ? new Date(publishedDate).toISOString() : new Date().toISOString() });
     document.getElementById('publicationUrl').value = '';
     document.getElementById('publicationDate').value = '';
@@ -1942,7 +1949,9 @@ async function saveManualPublication() {
 }
 
 async function createManualEffectArticle(title) {
-  const campaign = await ensureEffectCampaign();
+  // A historic article may be entered after the product form has been cleared.
+  // Reuse the campaign already loaded by the effects dashboard in that case.
+  const campaign = state.effectCampaign || await ensureEffectCampaign();
   if (!campaign) return null;
   const sourceKey = `manual-${campaign.id}-${title.trim().toLowerCase().replace(/\s+/g, '-')}`;
   const { data, error } = await supabaseClient.from('geo_articles').upsert({
