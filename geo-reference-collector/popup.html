@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GEO 引用采集</title>
+  <style>
+    body { width: 280px; margin: 0; padding: 16px; color: #172a20; font: 14px/1.5 Arial, sans-serif; }
+    h1 { margin: 0 0 8px; font-size: 16px; }
+    p { margin: 0 0 14px; color: #526258; }
+    button { width: 100%; border: 0; border-radius: 6px; padding: 10px 12px; background: #12633f; color: #fff; cursor: pointer; font-weight: 700; }
+    button:disabled { opacity: .6; cursor: wait; }
+    #status { min-height: 22px; margin-top: 10px; color: #526258; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>GEO AI 引用采集</h1>
+  <p>采集当前页可见的外部参考链接，并复制到剪贴板。</p>
+  <button id="collectButton">采集当前页引用</button>
+  <div id="status" aria-live="polite"></div>
+  <script src="collector-core.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

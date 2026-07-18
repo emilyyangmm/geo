@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "GEO AI 引用采集",
+  "version": "1.0.0",
+  "description": "一键采集当前 AI 回答页中可见的参考资料链接，导入 GEO 投放效果页。",
+  "permissions": ["activeTab", "scripting", "clipboardWrite"],
+  "action": {
+    "default_title": "采集当前页 AI 引用",
+    "default_popup": "popup.html"
+  }
+}
