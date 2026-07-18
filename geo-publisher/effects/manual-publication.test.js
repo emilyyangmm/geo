@@ -19,3 +19,9 @@ test('manual publication supports one confirmed URL for each selected platform',
   assert.match(page, /publishedUrls\.length !== platforms\.length/);
   assert.match(page, /for \(const \[index, platform\] of platforms\.entries\(\)\)/);
 });
+
+test('effect page imports collector clipboard lines with title and URL', () => {
+  assert.match(page, /function parseReferenceClipboard\(text\)/);
+  assert.match(page, /navigator\.clipboard\.readText\(\)/);
+  assert.match(page, /从剪贴板导入引用/);
+});

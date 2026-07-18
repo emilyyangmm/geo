@@ -960,6 +960,7 @@
           <div class="field" style="margin-top:14px">
             <label>AI 参考来源（推荐逐行粘贴链接）</label>
             <textarea id="effectSourceRefs" placeholder="每行一个 AI 实际参考资料链接。只有标题时可填：知乎|文章标题；网址匹配是最可靠的引用证据。"></textarea>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn btn-sm" type="button" onclick="importEffectSourcesFromClipboard()">从剪贴板导入引用</button><span class="hint">配合“GEO AI 引用采集”浏览器插件，一次导入当前 AI 页面全部参考资料。</span></div>
             <div class="hint">系统只会将命中“已确认发布链接”的来源计作引用；没有来源链接时会保留为“无法确认引用”。</div>
           </div>
         </div>
@@ -2097,10 +2098,28 @@ async function copyEffectQuestion() {
 function parseEffectSourceRefs(value) {
   const platformNames = { '知乎': 'zhihu', '头条': 'toutiao', '今日头条': 'toutiao', '百家号': 'baijiahao', '搜狐': 'sohu', '搜狐号': 'sohu', '公众号': 'wechat', '微信公众号': 'wechat' };
   return String(value || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => {
-    if (/^https?:\/\//i.test(line)) return { url: line, title: '', platform: '' };
+    const urlMatch = line.match(/https?:\/\/[^\s|｜]+/i);
+    if (urlMatch) return { url: urlMatch[0].replace(/[),.]+$/, ''), title: '', platform: '' };
     const parts = line.split(/[|｜]/).map(item => item.trim());
     return { url: '', platform: platformNames[parts[0]] || '', title: parts.length > 1 ? parts.slice(1).join(' ') : line };
   });
+}
+
+function parseReferenceClipboard(text) {
+  const urls = String(text || '').match(/https?:\/\/[^\s|｜]+/gi) || [];
+  return [...new Set(urls.map(value => value.replace(/[),.]+$/, '')))];
+}
+
+async function importEffectSourcesFromClipboard() {
+  try {
+    if (!navigator.clipboard?.readText) throw new Error('当前浏览器不支持读取剪贴板');
+    const urls = parseReferenceClipboard(await navigator.clipboard.readText());
+    if (!urls.length) throw new Error('剪贴板里没有可识别的参考链接，请先在 AI 页面点击“GEO AI 引用采集”');
+    document.getElementById('effectSourceRefs').value = urls.join('\n');
+    alert(`已导入 ${urls.length} 条 AI 参考链接`);
+  } catch (error) {
+    alert('导入引用失败：' + error.message);
+  }
 }
 
 async function saveRealAiScan() {
