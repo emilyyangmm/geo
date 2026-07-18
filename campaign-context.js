@@ -16,5 +16,11 @@
     };
   }
 
-  return { pickProductFromHistory };
+  function listProductsFromHistory(history) {
+    const articles = Array.isArray(history) ? history : [];
+    const sorted = [...articles].sort((a, b) => new Date(b.savedAt || 0) - new Date(a.savedAt || 0));
+    return [...new Set(sorted.map(article => String(article?.productName || '').trim()).filter(Boolean))];
+  }
+
+  return { pickProductFromHistory, listProductsFromHistory };
 });

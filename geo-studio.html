@@ -892,10 +892,16 @@
 
       <div class="card">
         <div class="card-title"><span class="icon">🎯</span> 当前投放对象</div>
+        <div class="field" style="max-width:520px;margin:0 0 12px">
+          <label>从历史文章选择产品</label>
+          <select id="effectProductSelect" onchange="selectEffectProduct(this.value)">
+            <option value="">请选择历史产品</option>
+          </select>
+        </div>
         <div id="effectCampaignSummary" style="color:var(--muted);font-size:13px;line-height:1.8">请先在“产品定义”填写产品信息，然后点击“同步当前产品”。</div>
         <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
           <button class="btn btn-primary" onclick="syncCurrentCampaign()">同步当前产品</button>
-          <button class="btn btn-sm" onclick="syncHistoryToEffects()">同步本地文章历史</button>
+          <button class="btn btn-sm" onclick="syncHistoryToEffects()">同步该产品文章历史</button>
           <button class="btn btn-sm" onclick="loadEffectDashboard()">刷新数据</button>
         </div>
       </div>
@@ -1589,6 +1595,35 @@ function restoreProductFromHistory() {
   return state.product;
 }
 
+function renderEffectProductSelector() {
+  const select = document.getElementById('effectProductSelect');
+  if (!select) return;
+  const historyProducts = window.GeoCampaignContext?.listProductsFromHistory(state.history) || [];
+  const currentName = String(state.product?.name || '').trim();
+  const products = [...new Set([currentName, ...historyProducts].filter(Boolean))];
+  select.innerHTML = products.length
+    ? products.map(name => `<option value="${escapeHTML(name)}">${escapeHTML(name)}</option>`).join('')
+    : '<option value="">暂无可选历史产品</option>';
+  if (currentName && products.includes(currentName)) select.value = currentName;
+}
+
+function selectEffectProduct(productName) {
+  const name = String(productName || '').trim();
+  if (!name || name === state.product?.name) return;
+  const latestArticle = state.history
+    .filter(article => String(article?.productName || '').trim() === name)
+    .sort((a, b) => new Date(b.savedAt || 0) - new Date(a.savedAt || 0))[0];
+  state.product = {
+    ...state.product,
+    name,
+    category: String(latestArticle?.tags?.[0] || state.product?.category || '').trim(),
+  };
+  state.effectCampaign = null;
+  const question = document.getElementById('effectQuestion');
+  if (question) question.value = '';
+  loadEffectDashboard();
+}
+
 function saveArticleHistory() {
   localStorage.setItem(HISTORY_KEY, JSON.stringify(state.history.slice(0, 80)));
 }
@@ -1719,12 +1754,15 @@ async function markArticlePublished(article, platform, url) {
 async function syncHistoryToEffects() {
   if (!requireLogin()) return;
   loadArticleHistory();
-  if (!state.history.length) return alert('当前没有可同步的文章历史');
+  restoreProductFromHistory();
+  const productName = String(state.product?.name || '').trim();
+  const productArticles = state.history.filter(article => String(article?.productName || '').trim() === productName);
+  if (!productArticles.length) return alert('当前产品没有可同步的文章历史，请先从上方选择历史产品');
   try {
     const campaign = await ensureEffectCampaign();
     if (!campaign) return;
-    for (const article of state.history) await syncArticleToEffects(article);
-    alert(`已同步 ${state.history.length} 篇本地文章历史`);
+    for (const article of productArticles) await syncArticleToEffects(article);
+    alert(`已同步“${productName}”的 ${productArticles.length} 篇文章历史`);
     await loadEffectDashboard();
   } catch (error) {
     alert('同步文章失败：' + error.message);
@@ -1784,6 +1822,7 @@ async function loadEffectDashboard() {
   try {
     loadArticleHistory();
     restoreProductFromHistory();
+    renderEffectProductSelector();
     let campaign = state.effectCampaign;
     if (!campaign && state.product?.name) campaign = await ensureEffectCampaign();
     renderEffectSummary(campaign || null);
