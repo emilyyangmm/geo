@@ -920,11 +920,11 @@
         <div id="manualPublicationForm" style="display:none;border-top:1px solid var(--border);padding-top:14px">
           <div class="form-grid">
             <div class="field"><label>关联文章</label><select id="publicationArticleSelect"></select></div>
-            <div class="field"><label>发布平台</label><select id="publicationPlatform"><option value="zhihu">知乎</option><option value="toutiao">今日头条</option><option value="baijiahao">百家号</option><option value="sohu">搜狐号</option><option value="wechat">微信公众号</option><option value="other">其他</option></select></div>
+            <div class="field"><label>发布平台（可多选）</label><div id="publicationPlatforms" style="display:flex;gap:10px;flex-wrap:wrap;padding:10px 0"><label><input type="checkbox" value="zhihu" checked> 知乎</label><label><input type="checkbox" value="toutiao"> 今日头条</label><label><input type="checkbox" value="baijiahao"> 百家号</label><label><input type="checkbox" value="sohu"> 搜狐号</label><label><input type="checkbox" value="wechat"> 微信公众号</label><label><input type="checkbox" value="other"> 其他</label></div></div>
           </div>
           <div class="field" style="margin-top:12px"><label>文章标题（列表没有旧文章时填写）</label><input id="manualPublicationTitle" type="text" placeholder="例如：惠州龙门地派、云顶、富力希尔顿温泉对比怎么选" /></div>
           <div class="form-grid" style="margin-top:12px">
-            <div class="field"><label>真实文章链接</label><input id="publicationUrl" type="url" placeholder="粘贴文章公开链接，例如 https://..." /></div>
+            <div class="field"><label>真实文章链接</label><textarea id="publicationUrl" rows="3" placeholder="单个平台填一条链接；多平台请逐行填写，顺序按上方勾选的平台对应。"></textarea></div>
             <div class="field"><label>发布时间（可选）</label><input id="publicationDate" type="datetime-local" /></div>
           </div>
           <div style="margin-top:12px"><button class="btn btn-primary" onclick="saveManualPublication()">保存为手动已确认</button></div>
@@ -1922,27 +1922,34 @@ async function confirmPublication(publicationId) {
 async function saveManualPublication() {
   if (!requireLogin()) return;
   const articleId = document.getElementById('publicationArticleSelect').value;
-  const platform = document.getElementById('publicationPlatform').value;
-  const publishedUrl = document.getElementById('publicationUrl').value.trim();
+  const platforms = [...document.querySelectorAll('#publicationPlatforms input:checked')].map(input => input.value);
+  const publishedUrls = document.getElementById('publicationUrl').value.split(/\r?\n/).map(value => value.trim()).filter(Boolean);
   const publishedDate = document.getElementById('publicationDate').value;
   const manualTitle = document.getElementById('manualPublicationTitle').value.trim();
   let article = state.effectArticles.find(item => item.id === articleId);
-  if (!publishedUrl) return alert('请填写真实文章链接');
+  if (!platforms.length) return alert('请至少选择一个发布平台');
+  if (!publishedUrls.length) return alert('请填写真实文章链接');
+  if (publishedUrls.length !== platforms.length) return alert('链接数量需与勾选的平台数量一致；单个平台填一条，多平台逐行填写对应链接');
   try {
-    const url = new URL(publishedUrl);
-    if (!['http:', 'https:'].includes(url.protocol)) throw new Error('链接必须以 http:// 或 https:// 开头');
+    publishedUrls.forEach(value => {
+      const url = new URL(value);
+      if (!['http:', 'https:'].includes(url.protocol)) throw new Error('链接必须以 http:// 或 https:// 开头');
+    });
   } catch (error) {
     return alert('文章链接格式不正确：' + error.message);
   }
   try {
     if (!article && manualTitle) article = await createManualEffectArticle(manualTitle);
     if (!article) throw new Error('请选择关联文章，或填写文章标题后再保存。若提示未同步产品，请先点击“同步当前产品”。');
-    await recordArticlePublication({ article, platform, publishedUrl, source: 'manual', status: 'manual', publishedAt: publishedDate ? new Date(publishedDate).toISOString() : new Date().toISOString() });
+    const publishedAt = publishedDate ? new Date(publishedDate).toISOString() : new Date().toISOString();
+    for (const [index, platform] of platforms.entries()) {
+      await recordArticlePublication({ article, platform, publishedUrl: publishedUrls[index], source: 'manual', status: 'manual', publishedAt });
+    }
     document.getElementById('publicationUrl').value = '';
     document.getElementById('publicationDate').value = '';
     document.getElementById('manualPublicationTitle').value = '';
     await loadEffectDashboard();
-    alert('手动发布记录已保存');
+    alert(`已保存 ${platforms.length} 个平台的手动发布记录`);
   } catch (error) {
     alert('保存发布记录失败：' + error.message);
   }
