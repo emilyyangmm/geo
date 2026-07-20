@@ -2014,6 +2014,40 @@ function prefillEffectQuestion(campaign) {
   field.value = (campaign.keywords || [])[0] || `${campaign.product_name} 怎么选？`;
 }
 
+function getEffectSourceRefs(scan) {
+  return Array.isArray(scan?.source_refs) ? scan.source_refs.filter(Boolean) : [];
+}
+
+function getSafeHttpUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+  } catch {
+    return '';
+  }
+}
+
+function renderEffectSourceDetails(scan) {
+  const sources = getEffectSourceRefs(scan);
+  const matches = Array.isArray(scan?.citation_matches) ? scan.citation_matches : [];
+  const matchedUrls = new Set(matches.map(item => String(item?.sourceUrl || '').trim()).filter(Boolean));
+  const unmatched = sources.filter(source => !matchedUrls.has(String(source?.url || '').trim()));
+  const sourceLabel = sources.length ? `已采集参考链接 ${sources.length} 条` : '未采集参考链接';
+  const matchLabel = `已匹配发布链接 ${matches.length} 条`;
+  if (!sources.length) {
+    return `<div style="font-size:12px;color:var(--muted);margin-top:6px">${sourceLabel}，本条记录无法验证 AI 是否引用了你的文章。</div>`;
+  }
+  const sourceRows = sources.map(source => {
+    const url = getSafeHttpUrl(source?.url);
+    const title = String(source?.title || url || '未命名参考来源');
+    const isMatched = matchedUrls.has(String(source?.url || '').trim());
+    const status = isMatched ? '已匹配发布链接' : '未匹配参考链接';
+    const link = url ? `<a href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(title)}</a>` : escapeHTML(title);
+    return `<li style="margin-top:5px"><span class="tag ${isMatched ? 'tag-green' : 'tag-gray'}">${status}</span> ${link}</li>`;
+  }).join('');
+  return `<div style="font-size:12px;color:var(--muted);margin-top:6px">${sourceLabel} · ${matchLabel} · 未匹配参考链接 ${unmatched.length} 条</div><details style="margin-top:6px"><summary style="cursor:pointer;color:var(--green2);font-size:12px;font-weight:800">查看采集的参考链接和比对结果</summary><ul style="margin:6px 0 0 18px;font-size:12px;line-height:1.7">${sourceRows}</ul></details>`;
+}
+
 function renderEffectScans(scans) {
   const empty = document.getElementById('effectScanEmpty');
   const list = document.getElementById('effectScanList');
@@ -2029,7 +2063,7 @@ function renderEffectScans(scans) {
     const sentimentClass = scan.sentiment === 'negative' ? 'tag-red' : scan.mentions_brand ? 'tag-green' : 'tag-gray';
     const citationCount = Number(scan.cited_publication_count || 0);
     const citationLabel = citationCount ? `引用我们的文章 ${citationCount} 条` : '未确认引用我们的文章';
-    return `<div class="history-item"><div style="flex:1;min-width:0"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><strong>${escapeHTML(AI_PLATFORM_LABELS[scan.platform] || scan.platform)}</strong><span class="tag ${citationCount ? 'tag-green' : 'tag-gray'}">${citationLabel}</span><span class="tag ${sentimentClass}">${sentimentLabel}</span><span class="tag tag-blue">${scan.mentions_brand ? '提及品牌/产品' : '未提及品牌/产品'}</span></div><div style="font-size:12px;color:var(--muted);margin-top:6px">问题：${escapeHTML(scan.question || '未记录')} · ${new Date(scan.created_at).toLocaleString('zh-CN')}</div><div style="font-size:12px;color:var(--muted);margin-top:5px;line-height:1.7">证据：${escapeHTML((scan.answer_text || '').slice(0, 240))}${(scan.answer_text || '').length > 240 ? '…' : ''}</div></div></div>`;
+    return `<div class="history-item"><div style="flex:1;min-width:0"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><strong>${escapeHTML(AI_PLATFORM_LABELS[scan.platform] || scan.platform)}</strong><span class="tag ${citationCount ? 'tag-green' : 'tag-gray'}">${citationLabel}</span><span class="tag ${sentimentClass}">${sentimentLabel}</span><span class="tag tag-blue">${scan.mentions_brand ? '提及品牌/产品' : '未提及品牌/产品'}</span></div><div style="font-size:12px;color:var(--muted);margin-top:6px">问题：${escapeHTML(scan.question || '未记录')} · ${new Date(scan.created_at).toLocaleString('zh-CN')}</div><div style="font-size:12px;color:var(--muted);margin-top:5px;line-height:1.7">证据：${escapeHTML((scan.answer_text || '').slice(0, 240))}${(scan.answer_text || '').length > 240 ? '…' : ''}</div>${renderEffectSourceDetails(scan)}</div></div>`;
   }).join('');
 }
 

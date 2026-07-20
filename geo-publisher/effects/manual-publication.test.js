@@ -25,3 +25,9 @@ test('effect page imports collector clipboard lines with title and URL', () => {
   assert.match(page, /navigator\.clipboard\.readText\(\)/);
   assert.match(page, /从剪贴板导入引用/);
 });
+
+test('effect scan records show saved sources and their citation match result', () => {
+  assert.match(page, /已采集参考链接/);
+  assert.match(page, /已匹配发布链接/);
+  assert.match(page, /未匹配参考链接/);
+});
