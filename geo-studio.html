@@ -2199,9 +2199,8 @@ async function saveRealAiScan() {
     });
     if (error) throw error;
     document.getElementById('effectAnswer').value = '';
-    document.getElementById('effectSourceRefs').value = '';
     await loadEffectDashboard();
-    alert('真实检测已保存');
+    alert(`真实检测已保存。本次已保存 ${sourceRefs.length} 条 AI 参考链接；引用框会保留，下一次检测前请替换为新的参考链接。`);
   } catch (error) {
     alert('保存检测失败：' + error.message);
   }
