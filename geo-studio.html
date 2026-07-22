@@ -2442,7 +2442,10 @@ window.goPage = function(n, el) {
 const SERVER = (() => {
   const host = location.hostname;
   const isLocal = host === '127.0.0.1' || host === 'localhost';
-  return isLocal ? '' : '/geo-api';
+  const isCloudBaseHosting = host.endsWith('.tcloudbaseapp.com');
+  if (isLocal) return '';
+  if (isCloudBaseHosting) return 'https://geo.miaomiaxiaoxianer.cn/geo-api';
+  return '/geo-api';
 })();
 
 function fetchWithTimeout(url, options = {}, timeout = 3000) {
