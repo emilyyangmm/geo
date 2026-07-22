@@ -16,6 +16,10 @@ async function isZhihuLoggedIn(page) {
   );
 }
 
+function canManuallyLoginToZhihu(platform = process.platform, display = process.env.DISPLAY) {
+  return platform !== 'linux' || Boolean(display);
+}
+
 async function waitForZhihuLogin(page, addLog, timeout = 120000) {
   addLog(`请在弹出的知乎窗口完成滑块/短信验证（最多等待 ${timeout / 1000} 秒）...`);
   const started = Date.now();
@@ -185,6 +189,9 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
     const isLoggedIn = await isZhihuLoggedIn(page);
 
     if (!isLoggedIn) {
+      if (!canManuallyLoginToZhihu()) {
+        throw new Error('知乎 Cookie 已加载，但服务器校验后仍是未登录状态。线上服务器无法弹出可操作的登录窗口，请重新从已登录的 zhihu.com 导出完整 Cookie 后保存。');
+      }
       addLog('未登录，准备打开知乎登录页...');
       await page.goto('https://www.zhihu.com/signin', { waitUntil: 'networkidle2' });
       await page.waitForTimeout(1000);
@@ -268,4 +275,4 @@ async function publish({ title, content, summary, tags, creds, cookiePath, addLo
   }
 }
 
-module.exports = { publish };
+module.exports = { publish, canManuallyLoginToZhihu };
